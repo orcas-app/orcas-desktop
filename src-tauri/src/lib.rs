@@ -1,0 +1,347 @@
+mod database;
+
+use serde::{Deserialize, Serialize};
+use std::process::Stdio;
+use std::sync::{Arc, LazyLock};
+use tauri::{Emitter, Manager};
+use tauri_plugin_sql::{Migration, MigrationKind};
+use tokio::process::Command;
+use tokio::sync::Mutex;
+
+mod chat;
+mod settings;
+mod providers;
+mod planning_agent;
+mod edit_locks;
+mod task_notes;
+#[derive(Debug, Serialize, Deserialize)]
+struct PlanningResult {
+    success: bool,
+    message: String,
+    subtasks_created: Option<i32>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct PlanningCompleteEvent {
+    task_id: i32,
+    success: bool,
+    message: String,
+    subtasks_created: Option<i32>,
+    error: Option<String>,
+}
+
+// Global state to track MCP server process
+static MCP_SERVER_PROCESS: LazyLock<Arc<Mutex<Option<tokio::process::Child>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(None)));
+
+#[tauri::command]
+async fn start_mcp_server() -> Result<String, String> {
+    let process_guard = MCP_SERVER_PROCESS.clone();
+    let mut guard = process_guard.lock().await;
+
+    // If server is already running, return success
+    if guard.is_some() {
+        return Ok("MCP server is already running".to_string());
+    }
+
+    // Start the MCP server process from the current working directory
+    let child = Command::new("npx")
+        .args(["tsx", "src/mcp-servers/agent-notes-server.ts"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to start MCP server: {}", e))?;
+
+    *guard = Some(child);
+    Ok("MCP server started successfully".to_string())
+}
+
+#[tauri::command]
+async fn stop_mcp_server() -> Result<String, String> {
+    let process_guard = MCP_SERVER_PROCESS.clone();
+    let mut guard = process_guard.lock().await;
+
+    if let Some(mut child) = guard.take() {
+        child
+            .kill()
+            .await
+            .map_err(|e| format!("Failed to kill MCP server: {}", e))?;
+        Ok("MCP server stopped successfully".to_string())
+    } else {
+        Ok("MCP server was not running".to_string())
+    }
+}
+
+#[tauri::command]
+async fn start_task_planning(
+    task_id: i32,
+    task_title: String,
+    task_description: Option<String>,
+    agents: String,
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    // Spawn the planning task in the background
+    let app_handle_clone = app_handle.clone();
+    tokio::spawn(async move {
+        let app_handle_for_error = app_handle_clone.clone();
+        if let Err(e) = execute_task_planning(
+            task_id,
+            task_title,
+            task_description,
+            agents,
+            app_handle_clone,
+        )
+        .await
+        {
+            // Emit error event
+            let error_event = PlanningCompleteEvent {
+                task_id,
+                success: false,
+                message: "Task planning failed".to_string(),
+                subtasks_created: None,
+                error: Some(e),
+            };
+            let _ = app_handle_for_error.emit("task-planning-complete", error_event);
+        }
+    });
+
+    Ok("Task planning started".to_string())
+}
+
+async fn execute_task_planning(
+    task_id: i32,
+    task_title: String,
+    task_description: Option<String>,
+    _agents: String, // DEPRECATED: agents now loaded from database
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    use planning_agent::PlanningAgent;
+
+    // Create planning agent instance
+    let planning_agent = PlanningAgent::new(app_handle.clone(), task_id).await?;
+
+    // Execute AI-powered planning with fallback
+    match planning_agent
+        .plan_task_with_fallback(task_title.clone(), task_description.clone())
+        .await
+    {
+        Ok(result) => {
+            // Emit completion event
+            let complete_event = PlanningCompleteEvent {
+                task_id,
+                success: true,
+                message: result.message,
+                subtasks_created: Some(result.subtasks_created),
+                error: None,
+            };
+            app_handle
+                .emit("task-planning-complete", complete_event)
+                .map_err(|e| format!("Failed to emit complete event: {}", e))?;
+            Ok(())
+        }
+        Err(e) => {
+            // Emit error event
+            let error_event = PlanningCompleteEvent {
+                task_id,
+                success: false,
+                message: "Planning failed".to_string(),
+                subtasks_created: None,
+                error: Some(e),
+            };
+            app_handle
+                .emit("task-planning-complete", error_event)
+                .map_err(|e| format!("Failed to emit error event: {}", e))?;
+            Err("Planning failed".to_string())
+        }
+    }
+}
+
+// Tauri command to get available models from the configured provider
+#[tauri::command]
+async fn get_available_models(
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<providers::ModelInfo>, String> {
+    providers::fetch_models(app_handle).await
+}
+
+// Tauri command to resolve a friendly model name to its full snapshot ID
+#[tauri::command]
+async fn resolve_model_id(
+    app_handle: tauri::AppHandle,
+    friendly_name: String,
+) -> Result<String, String> {
+    providers::resolve_model_name(app_handle, &friendly_name).await
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let migrations = vec![
+        Migration {
+            version: 1,
+            description: "create_initial_tables",
+            sql: include_str!("../migrations/001_initial_schema.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "add_subtask_descriptions",
+            sql: include_str!("../migrations/002_add_subtask_descriptions.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 3,
+            description: "placeholder_migration",
+            sql: include_str!("../migrations/003_placeholder_migration.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 4,
+            description: "placeholder_migration",
+            sql: include_str!("../migrations/004_placeholder_migration.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 6,
+            description: "placeholder_migration",
+            sql: include_str!("../migrations/006_placeholder_migration.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 9,
+            description: "add_agents_table",
+            sql: include_str!("../migrations/009_add_agents_table.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 10,
+            description: "add_sample_agent",
+            sql: include_str!("../migrations/010_add_sample_agent.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 5,
+            description: "add_task_agent_sessions",
+            sql: include_str!("../migrations/005_add_task_agent_sessions.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 11,
+            description: "add_marketing_copywriter_agent",
+            sql: include_str!("../migrations/011_add_marketing_copywriter_agent.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 7,
+            description: "add_task_notes_path",
+            sql: include_str!("../migrations/007_add_task_notes_path.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 8,
+            description: "create_agent_notes_table",
+            sql: include_str!("../migrations/008_create_agent_notes_table.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 12,
+            description: "add_settings_table",
+            sql: include_str!("../migrations/012_add_settings_table.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 13,
+            description: "add_agent_id_to_subtasks",
+            sql: include_str!("../migrations/012_add_agent_id_to_subtasks.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 14,
+            description: "add_planning_agent",
+            sql: include_str!("../migrations/013_add_planning_agent.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 15,
+            description: "update_model_names",
+            sql: include_str!("../migrations/014_update_model_names.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 16,
+            description: "create_agent_edit_locks",
+            sql: include_str!("../migrations/016_create_agent_edit_locks.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 17,
+            description: "create_task_notes_table",
+            sql: include_str!("../migrations/017_create_task_notes_table.sql"),
+            kind: MigrationKind::Up,
+        },
+    ];
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(
+            tauri_plugin_sql::Builder::default()
+                .add_migrations("sqlite:orcascore.db", migrations)
+                .build(),
+        )
+        .setup(|app| {
+            // Initialize the database pool for Rust-side database operations
+            let app_data_dir = app.path().app_data_dir()
+                .expect("Failed to get app data directory");
+
+            // Spawn async init in a blocking way during setup
+            tauri::async_runtime::block_on(async {
+                if let Err(e) = settings::init_db_pool(&app_data_dir).await {
+                    eprintln!("Warning: Failed to initialize Rust database pool: {}", e);
+                    // Non-fatal - the frontend SQL plugin will still work
+                }
+
+                // Clean up stale locks on startup (older than 5 minutes)
+                let app_handle = app.handle().clone();
+                if let Err(e) = edit_locks::cleanup_stale_locks(5, app_handle).await {
+                    eprintln!("Warning: Failed to cleanup stale locks: {}", e);
+                }
+
+                // Spawn background task to periodically clean up stale locks
+                let app_handle_bg = app.handle().clone();
+                tokio::spawn(async move {
+                    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
+                    loop {
+                        interval.tick().await;
+                        if let Err(e) = edit_locks::cleanup_stale_locks(5, app_handle_bg.clone()).await {
+                            eprintln!("Warning: Background cleanup of stale locks failed: {}", e);
+                        }
+                    }
+                });
+            });
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            start_mcp_server,
+            stop_mcp_server,
+            chat::send_chat_message,
+            settings::get_setting,
+            settings::set_setting,
+            settings::delete_setting,
+            start_task_planning,
+            get_available_models,
+            resolve_model_id,
+            edit_locks::acquire_edit_lock,
+            edit_locks::release_edit_lock,
+            edit_locks::check_edit_lock,
+            edit_locks::get_original_content,
+            edit_locks::force_release_all_locks,
+            edit_locks::cleanup_stale_locks,
+            task_notes::read_task_notes,
+            task_notes::write_task_notes
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}

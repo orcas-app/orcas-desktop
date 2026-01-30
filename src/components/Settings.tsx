@@ -1,0 +1,345 @@
+import { useState, useEffect } from "react";
+import {
+  Box,
+  Heading,
+  Text,
+  TextInput,
+  Button,
+  Flash,
+  FormControl,
+  Radio,
+  RadioGroup,
+} from "@primer/react";
+import { getSetting, setSetting } from "../api";
+import { PROVIDERS, Provider } from "../providers";
+
+interface SettingsProps {
+  onBack: () => void;
+}
+
+function Settings({ onBack }: SettingsProps) {
+  const [selectedProvider, setSelectedProvider] = useState<Provider>('anthropic');
+  const [settings, setSettings] = useState<Record<string, string>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      setIsLoading(true);
+
+      // Load selected provider
+      const provider = await getSetting("api_provider");
+      if (provider && (provider === 'anthropic' || provider === 'litellm')) {
+        setSelectedProvider(provider as Provider);
+      }
+
+      // Load all settings for all providers
+      const loadedSettings: Record<string, string> = {};
+      for (const provider of PROVIDERS) {
+        for (const field of provider.settingsFields) {
+          try {
+            const value = await getSetting(field.key);
+            if (value) {
+              loadedSettings[field.key] = value;
+            }
+          } catch {
+            // Setting doesn't exist yet, skip
+          }
+        }
+      }
+
+      setSettings(loadedSettings);
+    } catch (error) {
+      console.error("Failed to load settings:", error);
+      setError("Failed to load settings");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const validateFields = (): boolean => {
+    const currentProvider = PROVIDERS.find(p => p.id === selectedProvider);
+    if (!currentProvider) return false;
+
+    const errors: Record<string, string> = {};
+
+    for (const field of currentProvider.settingsFields) {
+      const value = settings[field.key] || '';
+
+      // Required field check
+      if (field.required && !value.trim()) {
+        errors[field.key] = `${field.label} is required`;
+        continue;
+      }
+
+      // Custom validation
+      if (field.validate && value.trim()) {
+        const validationError = field.validate(value);
+        if (validationError) {
+          errors[field.key] = validationError;
+        }
+      }
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      setError(null);
+      setShowSuccess(false);
+      setFieldErrors({});
+
+      // Validate all fields
+      if (!validateFields()) {
+        setError("Please fix the errors below");
+        return;
+      }
+
+      // Save provider selection
+      await setSetting("api_provider", selectedProvider);
+
+      // Save all settings for current provider
+      const currentProvider = PROVIDERS.find(p => p.id === selectedProvider);
+      if (currentProvider) {
+        for (const field of currentProvider.settingsFields) {
+          const value = settings[field.key];
+          if (value && value.trim()) {
+            await setSetting(field.key, value.trim());
+          }
+        }
+      }
+
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (error) {
+      console.error("Failed to save settings:", error);
+      setError("Failed to save settings. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const updateSetting = (key: string, value: string) => {
+    setSettings(prev => ({
+      ...prev,
+      [key]: value
+    }));
+
+    // Clear field error when user types
+    if (fieldErrors[key]) {
+      setFieldErrors(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  };
+
+  const currentProvider = PROVIDERS.find(p => p.id === selectedProvider);
+
+  return (
+    <Box height="100vh" display="flex" flexDirection="column">
+      {/* Header */}
+      <Box
+        p={3}
+        borderBottom="1px solid"
+        borderColor="border.default"
+        display="flex"
+        alignItems="center"
+        justifyContent="space-between"
+      >
+        <Heading sx={{ fontSize: 3 }}>Settings</Heading>
+        <Button size="small" onClick={onBack}>
+          Back
+        </Button>
+      </Box>
+
+      {/* Content */}
+      <Box p={4} flex={1} sx={{ overflowY: "auto", maxWidth: 800 }}>
+        {showSuccess && (
+          <Flash variant="success" sx={{ mb: 3 }}>
+            Settings saved successfully!
+          </Flash>
+        )}
+
+        {error && (
+          <Flash variant="danger" sx={{ mb: 3 }}>
+            {error}
+          </Flash>
+        )}
+
+        {isLoading ? (
+          <Text sx={{ fontSize: 1, color: "fg.muted" }}>Loading...</Text>
+        ) : (
+          <>
+            {/* Provider Selection */}
+            <Box mb={4}>
+              <Heading sx={{ fontSize: 2, mb: 2 }}>API Provider</Heading>
+              <Text sx={{ fontSize: 1, color: "fg.muted", mb: 3, display: "block" }}>
+                Choose how you want to access Claude models
+              </Text>
+
+              <RadioGroup
+                name="provider"
+                onChange={(value) => {
+                  setSelectedProvider(value as Provider);
+                  setFieldErrors({});
+                }}
+              >
+                {PROVIDERS.map((provider) => (
+                  <Box key={provider.id} mb={3}>
+                    <FormControl>
+                      <Radio
+                        value={provider.id}
+                        checked={selectedProvider === provider.id}
+                        disabled={isSaving}
+                      />
+                      <FormControl.Label sx={{ fontWeight: 'semibold' }}>
+                        {provider.name}
+                      </FormControl.Label>
+                    </FormControl>
+                    <Text sx={{ fontSize: 0, color: "fg.muted", ml: 4, display: "block" }}>
+                      {provider.description}
+                    </Text>
+                  </Box>
+                ))}
+              </RadioGroup>
+            </Box>
+
+            {/* Provider-Specific Settings */}
+            {currentProvider && (
+              <Box mb={4}>
+                <Heading sx={{ fontSize: 2, mb: 2 }}>
+                  {currentProvider.name} Configuration
+                </Heading>
+
+                {currentProvider.settingsFields.map((field) => (
+                  <Box key={field.key} mb={3}>
+                    <Text
+                      sx={{
+                        fontSize: 1,
+                        fontWeight: "semibold",
+                        mb: 2,
+                        display: "block",
+                      }}
+                    >
+                      {field.label}
+                      {field.required && (
+                        <Text as="span" sx={{ color: "danger.fg", ml: 1 }}>
+                          *
+                        </Text>
+                      )}
+                    </Text>
+
+                    <TextInput
+                      type={field.type === 'password' ? 'password' : 'text'}
+                      value={settings[field.key] || ''}
+                      onChange={(e) => updateSetting(field.key, e.target.value)}
+                      placeholder={field.placeholder}
+                      sx={{ width: "100%", maxWidth: 500 }}
+                      disabled={isSaving}
+                      validationStatus={fieldErrors[field.key] ? 'error' : undefined}
+                    />
+
+                    {fieldErrors[field.key] && (
+                      <Text sx={{ fontSize: 0, color: "danger.fg", mt: 1, display: "block" }}>
+                        {fieldErrors[field.key]}
+                      </Text>
+                    )}
+
+                    {field.helpText && !fieldErrors[field.key] && (
+                      <Text sx={{ fontSize: 0, color: "fg.muted", mt: 1, display: "block" }}>
+                        {field.helpText}
+                      </Text>
+                    )}
+                  </Box>
+                ))}
+
+                <Button
+                  variant="primary"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                >
+                  {isSaving ? "Saving..." : "Save Settings"}
+                </Button>
+              </Box>
+            )}
+
+            {/* Information Section */}
+            <Box
+              p={3}
+              backgroundColor="canvas.subtle"
+              borderRadius={2}
+              border="1px solid"
+              borderColor="border.default"
+            >
+              <Heading sx={{ fontSize: 1, mb: 2 }}>
+                About {currentProvider?.name}
+              </Heading>
+
+              {selectedProvider === 'anthropic' && (
+                <>
+                  <Text sx={{ fontSize: 1, color: "fg.muted", display: "block", mb: 2 }}>
+                    To get your Anthropic API key:
+                  </Text>
+                  <Box as="ol" sx={{ pl: 3, color: "fg.muted", fontSize: 1 }}>
+                    <li>Visit console.anthropic.com</li>
+                    <li>Sign in or create an account</li>
+                    <li>Navigate to API Keys section</li>
+                    <li>Create a new API key</li>
+                    <li>Copy and paste it here</li>
+                  </Box>
+                </>
+              )}
+
+              {selectedProvider === 'litellm' && (
+                <>
+                  <Text sx={{ fontSize: 1, color: "fg.muted", display: "block", mb: 2 }}>
+                    LiteLLM Gateway provides:
+                  </Text>
+                  <Box as="ul" sx={{ pl: 3, color: "fg.muted", fontSize: 1 }}>
+                    <li>Support for 100+ LLM providers</li>
+                    <li>Cost tracking and analytics</li>
+                    <li>Load balancing across models</li>
+                    <li>Guardrails and content filtering</li>
+                    <li>Centralized API key management</li>
+                  </Box>
+                  <Text sx={{ fontSize: 1, color: "fg.muted", display: "block", mt: 2 }}>
+                    Learn more at{" "}
+                    <a href="https://docs.litellm.ai" target="_blank" rel="noopener noreferrer">
+                      docs.litellm.ai
+                    </a>
+                  </Text>
+                </>
+              )}
+
+              <Text
+                sx={{
+                  fontSize: 1,
+                  color: "fg.muted",
+                  display: "block",
+                  mt: 3,
+                }}
+              >
+                Your credentials are stored securely in your local database and persist
+                across sessions and app updates.
+              </Text>
+            </Box>
+          </>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+export default Settings;

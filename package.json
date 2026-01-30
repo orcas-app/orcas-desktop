@@ -1,0 +1,40 @@
+{
+  "name": "orcas",
+  "private": true,
+  "version": "0.1.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.61.0",
+    "@fontsource/inter": "^5.2.6",
+    "@mdxeditor/editor": "^3.44.2",
+    "@modelcontextprotocol/sdk": "^1.0.5",
+    "@primer/octicons-react": "^19.16.0",
+    "@primer/react": "^37.31.0",
+    "@tauri-apps/api": "^2.9.1",
+    "@tauri-apps/plugin-fs": "^2.4.2",
+    "@tauri-apps/plugin-opener": "^2.2.3",
+    "@tauri-apps/plugin-sql": "^2.3.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
+    "react-textarea-autosize": "^8.5.9",
+    "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@types/sqlite3": "^3.1.11",
+    "@vitejs/plugin-react": "^4.6.0",
+    "tsx": "^4.19.2",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.4"
+  }
+}
