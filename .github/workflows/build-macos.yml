@@ -37,21 +37,83 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Tauri app
-        run: npm run tauri build -- --target aarch64-apple-darwin
-
-      - name: Codesign executable
-        env: 
+      - name: Import Code Signing Certificate
+        env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
         run: |
-          echo $MACOS_CERTIFICATE | base64 —decode > certificate.p12
-          security create-keychain -p <your-password> build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p <your-password> build.keychain
-          security import certificate.p12 -k build.keychain -P $MACOS_CERTIFICATE_PWD -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k <your-password> build.keychain
-          /usr/bin/codesign --force -s <identity-id> ./path/to/you/app -v
+          # Decode certificate
+          echo $MACOS_CERTIFICATE | base64 --decode > certificate.p12
+
+          # Create temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate
+          security import certificate.p12 -k "$KEYCHAIN_PATH" -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Add keychain to search list
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychain -d user | sed s/\"//g)
+
+          # Clean up certificate file
+          rm certificate.p12
+
+      - name: Build Tauri app
+        env:
+          APPLE_SIGNING_IDENTITY: Developer ID Application
+        run: npm run tauri build -- --target aarch64-apple-darwin
+
+      - name: Notarize app
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Find the app bundle
+          APP_PATH=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/macos -name "*.app" -print -quit)
+
+          echo "Notarizing $APP_PATH"
+
+          # Create a ZIP for notarization
+          ditto -c -k --keepParent "$APP_PATH" "Orcas.zip"
+
+          # Submit for notarization
+          xcrun notarytool submit "Orcas.zip" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+          # Staple the notarization ticket
+          xcrun stapler staple "$APP_PATH"
+
+          # Clean up
+          rm Orcas.zip
+
+          # Also notarize the DMG
+          DMG_PATH=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -name "*.dmg" -print -quit)
+          echo "Notarizing $DMG_PATH"
+
+          xcrun notarytool submit "$DMG_PATH" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+          xcrun stapler staple "$DMG_PATH"
+
+      - name: Cleanup Keychain
+        if: always()
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          if [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH"
+          fi
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
