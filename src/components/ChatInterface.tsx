@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Box, Text, Textarea, Button, Spinner } from "@primer/react";
+import { Box, Textarea, Button, Spinner } from "@primer/react";
 import { PaperAirplaneIcon } from "@primer/octicons-react";
 import ReactMarkdown from "react-markdown";
 import { invoke } from "@tauri-apps/api/core";
@@ -760,7 +760,14 @@ The notes are stored in Markdown format and are task-specific.`;
           <div className="message-content">
             <div className="mca">
               <ReactMarkdown>
-                {currentStreamingMessage.content || " "}
+                {typeof currentStreamingMessage.content === "string"
+                  ? currentStreamingMessage.content || " "
+                  : Array.isArray(currentStreamingMessage.content)
+                    ? currentStreamingMessage.content
+                        .filter((block) => block.type === "text")
+                        .map((block: any) => block.text)
+                        .join("")
+                    : " "}
               </ReactMarkdown>
               {currentStreamingMessage.streaming && (
                 <div className="streaming-indicator">
