@@ -721,57 +721,18 @@ The notes are stored in Markdown format and are task-specific.`;
       </div>
 
       {/* Messages */}
-      <div
-        ref={messagesContainerRef}
-        className="chat-messages-container"
-        style={{
-          flex: 1,
-          padding: 16,
-          overflowY: "auto",
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-          backgroundColor: "var(--bgColor-default, var(--color-canvas-default))",
-        }}
-      >
+      <div ref={messagesContainerRef} className="chat-messages-container">
         {messages.length === 0 && !currentStreamingMessage && (
-          <Box
-            display="flex"
-            alignItems="center"
-            justifyContent="center"
-            flexDirection="column"
-            height="100%"
-            sx={{ gap: 2 }}
-          >
-            <Box
-              sx={{
-                width: 48,
-                height: 48,
-                borderRadius: "50%",
-                backgroundColor: "accent.subtle",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 2,
-              }}
-            >
-              💬
-            </Box>
-            <Text sx={{ fontSize: 1, fontWeight: "semibold" }}>
+          <div className="chat-empty-state">
+            <div className="chat-empty-icon">💬</div>
+            <h4 className="chat-empty-title">
               Start a conversation with {agent.name}
-            </Text>
-            <Text
-              sx={{
-                fontSize: 0,
-                color: "fg.muted",
-                textAlign: "center",
-                maxWidth: "300px",
-              }}
-            >
+            </h4>
+            <p className="chat-empty-description">
               Ask questions, get feedback, or discuss your tasks. I'm here to
               help!
-            </Text>
-          </Box>
+            </p>
+          </div>
         )}
 
         {messages.map((message) => {
@@ -785,73 +746,30 @@ The notes are stored in Markdown format and are task-specific.`;
               : "";
 
           return (
-          <div className={"message-content"} key={message.id}>
-            <div className={message.role === "user" ? "mcu" : "mca"}>
-              {message.role === "user"
-                ? contentText
-                : renderMessageContent(contentText, message.id)}
+            <div className="message-content" key={message.id}>
+              <div className={message.role === "user" ? "mcu" : "mca"}>
+                {message.role === "user"
+                  ? contentText
+                  : renderMessageContent(contentText, message.id)}
+              </div>
             </div>
-            {message.role === "assistant" && message.usage && (
-              <Text
-                sx={{
-                  fontSize: 0,
-                  color: "fg.muted",
-                  mt: 1,
-                  fontFamily: "mono",
-                }}
-              >
-                {message.usage.input_tokens} in / {message.usage.output_tokens}{" "}
-                out • {message.usage.total_tokens} tokens •{" "}
-                {message.usage.estimated_cost
-                  ? `$${message.usage.estimated_cost.toFixed(4)}`
-                  : ""}
-              </Text>
-            )}
-          </div>
           );
         })}
 
         {currentStreamingMessage && (
-          <Box display="flex" sx={{ alignSelf: "flex-start", maxWidth: "85%" }}>
-            <Box
-              p={3}
-              borderRadius={3}
-              backgroundColor="canvas.subtle"
-              border="1px solid"
-              borderColor="border.default"
-              sx={{
-                boxShadow: "shadow.small",
-                position: "relative",
-              }}
-            >
-              <Text
-                sx={{ fontSize: 1, lineHeight: 1.5, whiteSpace: "pre-wrap" }}
-              >
-                {currentStreamingMessage.content}
-                {currentStreamingMessage.streaming && (
-                  <Box
-                    as="span"
-                    sx={{
-                      display: "inline-block",
-                      width: 2,
-                      height: 16,
-                      backgroundColor: "fg.default",
-                      ml: 1,
-                      animation: "blink 1s infinite",
-                    }}
-                  />
-                )}
-              </Text>
+          <div className="message-content">
+            <div className="mca">
+              <ReactMarkdown>
+                {currentStreamingMessage.content || " "}
+              </ReactMarkdown>
               {currentStreamingMessage.streaming && (
-                <Box display="flex" alignItems="center" sx={{ gap: 1, mt: 2 }}>
+                <div className="streaming-indicator">
                   <Spinner size="small" />
-                  <Text sx={{ fontSize: 0, color: "fg.muted" }}>
-                    {agent.name} is thinking...
-                  </Text>
-                </Box>
+                  <span>{agent.name} is thinking...</span>
+                </div>
               )}
-            </Box>
-          </Box>
+            </div>
+          </div>
         )}
 
         <div ref={messagesEndRef} />
@@ -884,17 +802,11 @@ The notes are stored in Markdown format and are task-specific.`;
             sx={{ minWidth: 80 }}
           ></Button>
         </Box>
-        <Text sx={{ fontSize: 0, color: "fg.muted", mt: 2 }}>
-          Press Cmd/Ctrl+Enter to send {isStreaming && "• Press Esc to cancel"}
-        </Text>
+        <p className="chat-input-hint">
+          Press Cmd/Ctrl+Enter to send{isStreaming && " • Press Esc to cancel"}
+        </p>
       </div>
 
-      <style>{`
-        @keyframes blink {
-          0%, 50% { opacity: 1; }
-          51%, 100% { opacity: 0; }
-        }
-      `}</style>
     </div>
   );
 }
