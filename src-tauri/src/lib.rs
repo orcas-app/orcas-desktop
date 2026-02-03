@@ -14,6 +14,7 @@ mod providers;
 mod planning_agent;
 mod edit_locks;
 mod task_notes;
+mod calendar;
 #[derive(Debug, Serialize, Deserialize)]
 struct PlanningResult {
     success: bool,
@@ -175,6 +176,71 @@ async fn resolve_model_id(
     providers::resolve_model_name(app_handle, &friendly_name).await
 }
 
+// Calendar integration commands
+
+#[tauri::command]
+async fn request_calendar_permission() -> Result<calendar::PermissionStatus, String> {
+    calendar::macos::request_calendar_permission().await
+}
+
+#[tauri::command]
+fn get_calendar_list() -> Result<Vec<calendar::Calendar>, String> {
+    calendar::macos::get_calendar_list()
+}
+
+#[tauri::command]
+fn get_events_for_date(
+    calendar_ids: Vec<String>,
+    date: String,
+) -> Result<Vec<calendar::CalendarEvent>, String> {
+    calendar::macos::get_events_for_date(calendar_ids, date)
+}
+
+// Today page task queries
+
+#[tauri::command]
+async fn get_tasks_scheduled_for_date(
+    date: String,
+) -> Result<Vec<database::Task>, String> {
+    let pool = settings::get_db_pool()?;
+
+    sqlx::query_as::<_, database::Task>(
+        r#"
+        SELECT id, project_id, title, description, status, priority,
+               due_date, scheduled_date, created_at, updated_at
+        FROM tasks
+        WHERE scheduled_date = ?
+        ORDER BY created_at DESC
+        "#
+    )
+    .bind(date)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("Database error: {}", e))
+}
+
+#[tauri::command]
+async fn get_recently_edited_tasks(
+    hours_ago: i64,
+) -> Result<Vec<database::Task>, String> {
+    let pool = settings::get_db_pool()?;
+
+    sqlx::query_as::<_, database::Task>(
+        r#"
+        SELECT id, project_id, title, description, status, priority,
+               due_date, scheduled_date, created_at, updated_at
+        FROM tasks
+        WHERE status != 'done'
+          AND updated_at >= datetime('now', ? || ' hours')
+        ORDER BY updated_at DESC
+        "#
+    )
+    .bind(format!("-{}", hours_ago))
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("Database error: {}", e))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![
@@ -280,11 +346,18 @@ pub fn run() {
             sql: include_str!("../migrations/017_create_task_notes_table.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 18,
+            description: "add_scheduled_date_to_tasks",
+            sql: include_str!("../migrations/018_add_scheduled_date_to_tasks.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_os::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:orcascore.db", migrations)
@@ -340,7 +413,12 @@ pub fn run() {
             edit_locks::force_release_all_locks,
             edit_locks::cleanup_stale_locks,
             task_notes::read_task_notes,
-            task_notes::write_task_notes
+            task_notes::write_task_notes,
+            request_calendar_permission,
+            get_calendar_list,
+            get_events_for_date,
+            get_tasks_scheduled_for_date,
+            get_recently_edited_tasks
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

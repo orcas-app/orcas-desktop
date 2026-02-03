@@ -22,6 +22,7 @@ tauri = { version = "2.0", features = [] }
 tauri-plugin-opener = "2.5"
 tauri-plugin-sql = { version = "2.0", features = ["sqlite"] }
 tauri-plugin-fs = "2.0"
+tauri-plugin-os = "2.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1.0", features = ["process", "io-util"] }
@@ -30,4 +31,11 @@ sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
 url = "2.5"
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1.10"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2"
+cocoa = "0.25"
+objc-foundation = "0.1"
+objc_id = "0.1"
+block = "0.1"
 

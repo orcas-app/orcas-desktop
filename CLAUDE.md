@@ -19,6 +19,8 @@ Orcas is a desktop application for managing AI agent workflows. It enables users
 - **UI Framework**: Primer React (GitHub's design system)
 - **Agent Tools**: Model Context Protocol (MCP)
 
+IMPORTANT!! the Box element (<Box>) is deprecated. NEVER INTRODUCE IT IN NEW CODE
+
 ## Key Documentation
 
 ### User Flows and Architecture
@@ -36,6 +38,11 @@ This is the best resource for understanding how the application works from a use
 - [MCP Integration](docs/README_MCP.md) - Model Context Protocol setup and agent tools
 - [Chat Interface Review](docs/CHAT_INTERFACE_REVIEW.md) - Chat implementation details
 - [Development Todo](docs/todo.md) - Current development tasks and priorities
+
+### Project tasks / todos
+
+- Tasks / todos for the project are stored in the [todos](todos/) folder
+- The task file name starts with the task priority. P0 is highest priority, P1 is medium priority and P2 is lower priority
 
 ## Project Structure
 

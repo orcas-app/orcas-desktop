@@ -30,6 +30,7 @@ import TaskDetail from "./components/TaskDetail";
 import Settings from "./components/Settings";
 import AgentsManager from "./components/AgentsManager";
 import ProjectHome from "./components/ProjectHome";
+import TodayPage from "./components/TodayPage";
 
 function App() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -43,6 +44,7 @@ function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showAgents, setShowAgents] = useState(false);
+  const [showToday, setShowToday] = useState(false);
   const [taskRefreshTrigger, setTaskRefreshTrigger] = useState(0);
 
   useEffect(() => {
@@ -196,12 +198,13 @@ function App() {
   }
 
   // Determine which view to show in the main content area
-  const currentView = showSettings ? "settings" : showAgents ? "agents" : "home";
+  const currentView = showSettings ? "settings" : showAgents ? "agents" : showToday ? "today" : "home";
 
   // Helper to handle navigation and clear other views
-  const handleNavigation = (view: "home" | "settings" | "agents") => {
+  const handleNavigation = (view: "home" | "settings" | "agents" | "today") => {
     setShowSettings(view === "settings");
     setShowAgents(view === "agents");
+    setShowToday(view === "today");
   };
 
   return (
@@ -273,9 +276,8 @@ function App() {
             </NavList.Item>
             <NavList.Item
                 key="0"
-                onClick={() => {
-                  setSelectedProject(null);
-                }}
+                onClick={() => handleNavigation("today")}
+                aria-current={currentView === "today" ? "page" : undefined}
               >
                 <NavList.LeadingVisual>
                   <StarIcon />
@@ -311,6 +313,7 @@ function App() {
         {/* Main Content */}
         {currentView === "settings" && <Settings onBack={() => handleNavigation("home")} />}
         {currentView === "agents" && <AgentsManager onBack={() => handleNavigation("home")} />}
+        {currentView === "today" && <TodayPage onTaskClick={(taskId) => setSelectedTaskId(taskId)} />}
         {currentView === "home" && (
           <ProjectHome
             selectedProject={selectedProject}

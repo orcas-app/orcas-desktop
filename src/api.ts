@@ -10,6 +10,9 @@ import type {
   TaskWithSubTasks,
   Agent,
   ModelInfo,
+  Calendar,
+  CalendarEvent,
+  PermissionStatus,
 } from "./types";
 
 let db: Database | null = null;
@@ -561,4 +564,69 @@ export async function resolveModelId(friendlyName: string): Promise<string> {
     console.error("Failed to resolve model ID:", error);
     throw error;
   }
+}
+
+// Calendar operations for Today page
+export async function requestCalendarPermission(): Promise<PermissionStatus> {
+  try {
+    return await invoke<PermissionStatus>("request_calendar_permission");
+  } catch (error) {
+    console.error("Failed to request calendar permission:", error);
+    throw error;
+  }
+}
+
+export async function getCalendarList(): Promise<Calendar[]> {
+  try {
+    return await invoke<Calendar[]>("get_calendar_list");
+  } catch (error) {
+    console.error("Failed to get calendar list:", error);
+    throw error;
+  }
+}
+
+export async function getEventsForDate(
+  calendarIds: string[],
+  date: string,
+): Promise<CalendarEvent[]> {
+  try {
+    return await invoke<CalendarEvent[]>("get_events_for_date", {
+      calendarIds,
+      date,
+    });
+  } catch (error) {
+    console.error("Failed to get events for date:", error);
+    throw error;
+  }
+}
+
+// Today page task queries
+export async function getTasksScheduledForDate(date: string): Promise<Task[]> {
+  try {
+    return await invoke<Task[]>("get_tasks_scheduled_for_date", { date });
+  } catch (error) {
+    console.error("Failed to get tasks scheduled for date:", error);
+    throw error;
+  }
+}
+
+export async function getRecentlyEditedTasks(hoursAgo: number): Promise<Task[]> {
+  try {
+    return await invoke<Task[]>("get_recently_edited_tasks", { hoursAgo });
+  } catch (error) {
+    console.error("Failed to get recently edited tasks:", error);
+    throw error;
+  }
+}
+
+// Update task scheduled date
+export async function updateTaskScheduledDate(
+  taskId: number,
+  scheduledDate: string | null,
+): Promise<void> {
+  const database = await getDb();
+  await database.execute(
+    "UPDATE tasks SET scheduled_date = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+    [scheduledDate, taskId],
+  );
 }

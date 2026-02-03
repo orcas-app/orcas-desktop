@@ -21,6 +21,7 @@ export interface Task {
   status: 'todo' | 'in_progress' | 'for_review' | 'done';
   priority: 'low' | 'medium' | 'high';
   due_date?: string;
+  scheduled_date?: string;
   notes_file_path?: string;
   created_at: string;
   updated_at: string;
@@ -122,3 +123,26 @@ export interface ModelInfo {
   display_name: string;  // Friendly name: "claude-sonnet-4"
   display_label: string; // Human label: "Claude Sonnet 4"
 }
+
+// Calendar types for Today page
+export interface Calendar {
+  id: string;
+  title: string;
+  color: string;
+  source: string;
+}
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  start_date: string;
+  end_date: string;
+  is_all_day: boolean;
+  location?: string;
+  notes?: string;
+  url?: string;
+  attendees: string[];
+  calendar_id: string;
+}
+
+export type PermissionStatus = 'notdetermined' | 'restricted' | 'denied' | 'authorized';

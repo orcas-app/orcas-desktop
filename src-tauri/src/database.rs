@@ -19,7 +19,7 @@ pub struct NewProject {
 }
 
 // Task-related structs
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Task {
     pub id: i64,
     pub project_id: i64,
@@ -28,6 +28,7 @@ pub struct Task {
     pub status: String,
     pub priority: String,
     pub due_date: Option<String>,
+    pub scheduled_date: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

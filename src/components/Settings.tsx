@@ -12,6 +12,7 @@ import {
 } from "@primer/react";
 import { getSetting, setSetting } from "../api";
 import { PROVIDERS, Provider } from "../providers";
+import CalendarSettings from "./CalendarSettings";
 
 interface SettingsProps {
   onBack: () => void;
@@ -275,65 +276,14 @@ function Settings({ onBack }: SettingsProps) {
               </Box>
             )}
 
-            {/* Information Section */}
+            {/* Calendar Settings Section */}
             <Box
-              p={3}
-              backgroundColor="canvas.subtle"
-              borderRadius={2}
-              border="1px solid"
+              mb={4}
+              pt={4}
+              borderTop="1px solid"
               borderColor="border.default"
             >
-              <Heading sx={{ fontSize: 1, mb: 2 }}>
-                About {currentProvider?.name}
-              </Heading>
-
-              {selectedProvider === 'anthropic' && (
-                <>
-                  <Text sx={{ fontSize: 1, color: "fg.muted", display: "block", mb: 2 }}>
-                    To get your Anthropic API key:
-                  </Text>
-                  <Box as="ol" sx={{ pl: 3, color: "fg.muted", fontSize: 1 }}>
-                    <li>Visit console.anthropic.com</li>
-                    <li>Sign in or create an account</li>
-                    <li>Navigate to API Keys section</li>
-                    <li>Create a new API key</li>
-                    <li>Copy and paste it here</li>
-                  </Box>
-                </>
-              )}
-
-              {selectedProvider === 'litellm' && (
-                <>
-                  <Text sx={{ fontSize: 1, color: "fg.muted", display: "block", mb: 2 }}>
-                    LiteLLM Gateway provides:
-                  </Text>
-                  <Box as="ul" sx={{ pl: 3, color: "fg.muted", fontSize: 1 }}>
-                    <li>Support for 100+ LLM providers</li>
-                    <li>Cost tracking and analytics</li>
-                    <li>Load balancing across models</li>
-                    <li>Guardrails and content filtering</li>
-                    <li>Centralized API key management</li>
-                  </Box>
-                  <Text sx={{ fontSize: 1, color: "fg.muted", display: "block", mt: 2 }}>
-                    Learn more at{" "}
-                    <a href="https://docs.litellm.ai" target="_blank" rel="noopener noreferrer">
-                      docs.litellm.ai
-                    </a>
-                  </Text>
-                </>
-              )}
-
-              <Text
-                sx={{
-                  fontSize: 1,
-                  color: "fg.muted",
-                  display: "block",
-                  mt: 3,
-                }}
-              >
-                Your credentials are stored securely in your local database and persist
-                across sessions and app updates.
-              </Text>
+              <CalendarSettings />
             </Box>
           </>
         )}
