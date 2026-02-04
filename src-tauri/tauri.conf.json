@@ -37,11 +37,7 @@
     "macOS": {
       "signingIdentity": null,
       "hardenedRuntime": true,
-      "entitlements": null,
-      "info": {
-        "NSCalendarsUsageDescription": "Orcas needs access to your calendars to display events on the Today page and help you plan your tasks around your schedule.",
-        "NSCalendarsFullAccessUsageDescription": "Orcas needs access to your calendars to display events on the Today page and help you plan your tasks around your schedule."
-      }
+      "entitlements": null
     }
   }
 }
