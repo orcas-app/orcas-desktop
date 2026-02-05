@@ -119,15 +119,17 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
   return (
     <div
       style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(300px, 1fr) minmax(400px, 2fr)',
+        display: 'flex',
         height: '100vh',
         overflow: 'hidden',
-        gap: '0',
       }}
     >
-      <AgendaView events={events} onRefresh={loadTodayData} />
-      <TodayTaskList tasks={tasks} onRefresh={loadTodayData} onTaskClick={onTaskClick} />
+      <div style={{ width: '320px', flexShrink: 0 }}>
+        <AgendaView events={events} onRefresh={loadTodayData} />
+      </div>
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        <TodayTaskList tasks={tasks} onRefresh={loadTodayData} onTaskClick={onTaskClick} />
+      </div>
     </div>
   );
 }
