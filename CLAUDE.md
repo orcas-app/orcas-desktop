@@ -44,6 +44,7 @@ This is the best resource for understanding how the application works from a use
 - Tasks / todos for the project are stored in the [todos](todos/) folder
 - The task file name starts with the task priority. P0 is highest priority, P1 is medium priority and P2 is lower priority
 - If the user asks to implement a particular todo, search the todos/ folder to find it
+- After completing a todo, move it to the todos/done subfolder
 
 ## Project Structure
 
