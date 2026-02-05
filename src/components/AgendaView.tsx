@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Box, Text, Heading, Button } from '@primer/react';
-import { CalendarIcon, SyncIcon } from '@primer/octicons-react';
+import { Box, Text, Heading, Button, IconButton } from '@primer/react';
+import { CalendarIcon, SyncIcon, VideoIcon } from '@primer/octicons-react';
 import type { CalendarEvent } from '../types';
 import EventPopover from './EventPopover';
+import { extractMeetingLink, removeVideoConferencingUrls, formatAttendees } from '../utils/videoConferencing';
 
 interface AgendaViewProps {
   events: CalendarEvent[];
@@ -115,38 +116,80 @@ export default function AgendaView({ events, onRefresh }: AgendaViewProps) {
                 >
                   All Day
                 </Text>
-                {allDayEvents.map((event) => (
-                  <Box
-                    key={event.id}
-                    onClick={(e: React.MouseEvent<HTMLDivElement>) => handleEventClick(event, e.currentTarget)}
-                    sx={{
-                      p: '10px',
-                      mb: '10px',
-                      bg: 'canvas.default',
-                      borderRadius: 2,
-                      border: '1px solid',
-                      borderColor: 'border.default',
-                      cursor: 'pointer',
-                      '&:hover': {
-                        bg: 'canvas.inset',
-                        borderColor: 'accent.emphasis',
-                      },
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Box
-                        sx={{
-                          width: 3,
-                          height: 3,
-                          borderRadius: '50%',
-                          bg: 'accent.emphasis',
-                          flexShrink: 0,
-                        }}
-                      />
-                      <Text sx={{ fontWeight: 'semibold' }}>{event.title}</Text>
+                {allDayEvents.map((event) => {
+                  const meetingLink = extractMeetingLink(event);
+                  const { displayText: attendeesText } = formatAttendees(event.attendees);
+
+                  return (
+                    <Box
+                      key={event.id}
+                      onClick={(e: React.MouseEvent<HTMLDivElement>) => handleEventClick(event, e.currentTarget)}
+                      sx={{
+                        p: '10px',
+                        mb: '10px',
+                        bg: 'canvas.default',
+                        borderRadius: 2,
+                        border: '1px solid',
+                        borderColor: 'border.default',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        '&:hover': {
+                          bg: 'canvas.inset',
+                          borderColor: 'accent.emphasis',
+                        },
+                      }}
+                    >
+                      {/* Video icon in top right */}
+                      {meetingLink && (
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            top: '8px',
+                            right: '8px',
+                          }}
+                        >
+                          <IconButton
+                            icon={VideoIcon}
+                            size="small"
+                            variant="invisible"
+                            aria-label="Join video meeting"
+                            onClick={(e: React.MouseEvent) => {
+                              e.stopPropagation();
+                              window.open(meetingLink, '_blank');
+                            }}
+                            sx={{
+                              color: 'accent.fg',
+                              '&:hover': {
+                                bg: 'accent.subtle',
+                              },
+                            }}
+                          />
+                        </Box>
+                      )}
+
+                      <Box sx={{ display: 'flex', alignItems: 'start', gap: 2, pr: meetingLink ? 4 : 0 }}>
+                        <Box
+                          sx={{
+                            width: 3,
+                            height: 3,
+                            borderRadius: '50%',
+                            bg: 'accent.emphasis',
+                            flexShrink: 0,
+                            mt: '6px',
+                          }}
+                        />
+                        <Box sx={{ flex: 1 }}>
+                          <Text sx={{ fontWeight: 'semibold', display: 'block' }}>{event.title}</Text>
+                          {attendeesText && (
+                            <Text sx={{ fontSize: 1, color: 'fg.muted', mt: 1, display: 'block' }}>
+                              {attendeesText}
+                            </Text>
+                          )}
+                        </Box>
+                      </Box>
                     </Box>
-                  </Box>
-                ))}
+                  );
+                })}
               </Box>
             )}
 
@@ -166,48 +209,88 @@ export default function AgendaView({ events, onRefresh }: AgendaViewProps) {
                 >
                   Schedule
                 </Text>
-                {timedEvents.map((event) => (
-                  <Box
-                    key={event.id}
-                    onClick={(e: React.MouseEvent<HTMLDivElement>) => handleEventClick(event, e.currentTarget)}
-                    sx={{
-                      p: '10px',
-                      mb: '10px',
-                      bg: 'canvas.default',
-                      borderRadius: 2,
-                      border: '1px solid',
-                      borderColor: 'border.default',
-                      cursor: 'pointer',
-                      '&:hover': {
-                        bg: 'canvas.inset',
-                        borderColor: 'accent.emphasis',
-                      },
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', gap: 2 }}>
-                      <Text
-                        sx={{
-                          fontSize: 1,
-                          color: 'fg.muted',
-                          minWidth: '70px',
-                          flexShrink: 0,
-                        }}
-                      >
-                        {formatTime(event.start_date)}
-                      </Text>
-                      <Box sx={{ flex: 1 }}>
-                        <Text sx={{ fontWeight: 'semibold', display: 'block' }}>
-                          {event.title}
+                {timedEvents.map((event) => {
+                  const meetingLink = extractMeetingLink(event);
+                  const cleanLocation = event.location ? removeVideoConferencingUrls(event.location) : '';
+                  const { displayText: attendeesText } = formatAttendees(event.attendees);
+
+                  return (
+                    <Box
+                      key={event.id}
+                      onClick={(e: React.MouseEvent<HTMLDivElement>) => handleEventClick(event, e.currentTarget)}
+                      sx={{
+                        p: '10px',
+                        mb: '10px',
+                        bg: 'canvas.default',
+                        borderRadius: 2,
+                        border: '1px solid',
+                        borderColor: 'border.default',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        '&:hover': {
+                          bg: 'canvas.inset',
+                          borderColor: 'accent.emphasis',
+                        },
+                      }}
+                    >
+                      {/* Video icon in top right */}
+                      {meetingLink && (
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            top: '8px',
+                            right: '8px',
+                          }}
+                        >
+                          <IconButton
+                            icon={VideoIcon}
+                            size="small"
+                            variant="invisible"
+                            aria-label="Join video meeting"
+                            onClick={(e: React.MouseEvent) => {
+                              e.stopPropagation();
+                              window.open(meetingLink, '_blank');
+                            }}
+                            sx={{
+                              color: 'accent.fg',
+                              '&:hover': {
+                                bg: 'accent.subtle',
+                              },
+                            }}
+                          />
+                        </Box>
+                      )}
+
+                      <Box sx={{ display: 'flex', gap: 2 }}>
+                        <Text
+                          sx={{
+                            fontSize: 1,
+                            color: 'fg.muted',
+                            minWidth: '70px',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {formatTime(event.start_date)}
                         </Text>
-                        {event.location && (
-                          <Text sx={{ fontSize: 1, color: 'fg.muted', mt: 1 }}>
-                            {event.location}
+                        <Box sx={{ flex: 1, pr: meetingLink ? 4 : 0 }}>
+                          <Text sx={{ fontWeight: 'semibold', display: 'block' }}>
+                            {event.title}
                           </Text>
-                        )}
+                          {cleanLocation && (
+                            <Text sx={{ fontSize: 1, color: 'fg.muted', mt: 1, display: 'block' }}>
+                              {cleanLocation}
+                            </Text>
+                          )}
+                          {attendeesText && (
+                            <Text sx={{ fontSize: 1, color: 'fg.muted', mt: 1, display: 'block' }}>
+                              {attendeesText}
+                            </Text>
+                          )}
+                        </Box>
                       </Box>
                     </Box>
-                  </Box>
-                ))}
+                  );
+                })}
               </Box>
             )}
           </>

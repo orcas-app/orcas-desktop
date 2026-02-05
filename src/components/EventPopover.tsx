@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Box, Text, Heading, IconButton } from '@primer/react';
 import { XIcon, ClockIcon, LocationIcon, PeopleIcon, LinkIcon } from '@primer/octicons-react';
 import type { CalendarEvent } from '../types';
+import { extractMeetingLink } from '../utils/videoConferencing';
 
 interface EventPopoverProps {
   event: CalendarEvent;
@@ -76,28 +77,7 @@ export default function EventPopover({ event, anchorElement, onClose }: EventPop
     return `${formatTime(event.start_date)} - ${formatTime(event.end_date)}`;
   };
 
-  const extractMeetingLink = (): string | null => {
-    // Check if there's a URL
-    if (event.url) {
-      return event.url;
-    }
-
-    // Check notes for common meeting links
-    if (event.notes) {
-      const zoomMatch = event.notes.match(/https:\/\/[\w-]*\.?zoom\.us\/\S+/i);
-      if (zoomMatch) return zoomMatch[0];
-
-      const meetMatch = event.notes.match(/https:\/\/meet\.google\.com\/\S+/i);
-      if (meetMatch) return meetMatch[0];
-
-      const teamsMatch = event.notes.match(/https:\/\/teams\.microsoft\.com\/\S+/i);
-      if (teamsMatch) return teamsMatch[0];
-    }
-
-    return null;
-  };
-
-  const meetingLink = extractMeetingLink();
+  const meetingLink = extractMeetingLink(event);
 
   return (
     <>
@@ -127,6 +107,8 @@ export default function EventPopover({ event, anchorElement, onClose }: EventPop
           p: 3,
           minWidth: '320px',
           maxWidth: '480px',
+          maxHeight: '90vh',
+          overflowY: 'auto',
           zIndex: 1000,
         }}
       >
