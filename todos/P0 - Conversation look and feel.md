@@ -8,7 +8,7 @@
 
 **Expected behavior:** The text input should span the full width of the chat window.
 
-**Action:** Debug why the current `flex={1}` implementation isn't achieving full width. The send button is currently positioned to the right of the input - verify if this is causing the issue or if there's a CSS constraint.
+**Action:** Debug why the current `flex={1}` implementation isn't achieving full width. Keep the send button to the right of the input.
 
 ---
 
@@ -32,6 +32,8 @@
    - Clicking "Add new" navigates to agent creation
 
 **Layout:** `[Agent name ▼]` positioned where the hint text currently is
+
+**"Add new" behavior:** Navigate to the agents page (not a modal)
 
 ---
 
@@ -60,8 +62,9 @@
 2. **Change** layout to single horizontal row (flexbox, space-between)
 3. **Move** button to right side
 4. **Change** button text from "Plan task" to "Plan"
-5. **Match** the visual style of the collapsed header (padding, alignment, hover state)
-6. **Keep** error message display in same location (below the row, inside the card)
+5. **Change** button style from `variant="primary"` to `variant="secondary"`
+6. **Match** the visual style of the collapsed header (padding, alignment, hover state)
+7. **Keep** error message display in same location (below the row, inside the card)
 
 ---
 
