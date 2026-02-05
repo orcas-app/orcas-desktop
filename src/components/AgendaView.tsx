@@ -46,14 +46,12 @@ export default function AgendaView({ events, onRefresh }: AgendaViewProps) {
         borderColor: 'border.default',
         height: '100%',
         overflowY: 'auto',
-        bg: 'canvas.subtle',
+        bg: 'canvas.default',
       }}
     >
       <Box
         sx={{
           p: 2,
-          borderBottom: '1px solid',
-          borderColor: 'border.default',
           bg: 'canvas.default',
           position: 'sticky',
           top: 0,
@@ -65,9 +63,7 @@ export default function AgendaView({ events, onRefresh }: AgendaViewProps) {
             <CalendarIcon size={18} />
             Today's Agenda
           </Heading>
-          <Button size="small" onClick={onRefresh} leadingVisual={SyncIcon}>
-            Refresh
-          </Button>
+          <Button size="small" onClick={onRefresh} leadingVisual={SyncIcon}></Button>
         </Box>
         <Text sx={{ fontSize: 1, color: 'fg.muted', mt: 1 }}>
           {new Date().toLocaleDateString('en-US', {

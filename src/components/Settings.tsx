@@ -149,24 +149,18 @@ function Settings({ onBack }: SettingsProps) {
   const currentProvider = PROVIDERS.find(p => p.id === selectedProvider);
 
   return (
-    <Box height="100vh" display="flex" flexDirection="column">
-      {/* Header */}
-      <Box
-        p={3}
-        borderBottom="1px solid"
-        borderColor="border.default"
-        display="flex"
-        alignItems="center"
-        justifyContent="space-between"
-      >
-        <Heading sx={{ fontSize: 3 }}>Settings</Heading>
-        <Button size="small" onClick={onBack}>
-          Back
-        </Button>
-      </Box>
+    <div
+      style={{
+        display: 'flex',
+        height: '100vh',
+        overflow: 'hidden',
+        width: '100%',
+        flexDirection: 'column',
+      }}
+    >
 
       {/* Content */}
-      <Box p={4} flex={1} sx={{ overflowY: "auto", maxWidth: 800 }}>
+      <Box p={4} flex={1} sx={{ overflowY: "auto" }}>
         {showSuccess && (
           <Flash variant="success" sx={{ mb: 3 }}>
             Settings saved successfully!
@@ -187,7 +181,7 @@ function Settings({ onBack }: SettingsProps) {
             <Box mb={4}>
               <Heading sx={{ fontSize: 2, mb: 2 }}>API Provider</Heading>
               <Text sx={{ fontSize: 1, color: "fg.muted", mb: 3, display: "block" }}>
-                Choose how you want to access Claude models
+                Choose how you want to access models
               </Text>
 
               <RadioGroup
@@ -288,7 +282,7 @@ function Settings({ onBack }: SettingsProps) {
           </>
         )}
       </Box>
-    </Box>
+    </div>
   );
 }
 

@@ -145,7 +145,7 @@ function PlanCard({ subtasks, task, onPlanningComplete }: PlanCardProps) {
     }
   };
 
-  // Empty state - show "Plan task" CTA
+  // Empty state - show "Plan" CTA in collapsed header style
   if (totalCount === 0 && !isPlanning && !planningResult && !wasCancelled) {
     return (
       <Box
@@ -153,28 +153,34 @@ function PlanCard({ subtasks, task, onPlanningComplete }: PlanCardProps) {
         border="1px solid"
         borderColor="border.default"
         borderRadius={2}
-        p={3}
+        overflow="hidden"
       >
-        <Text sx={{ fontWeight: "semibold", fontSize: 1, mb: 2, display: "block" }}>
-          Plan
-        </Text>
-        <Text sx={{ fontSize: 0, color: "fg.muted", mb: 3, display: "block" }}>
-          No subtasks yet. Let AI analyze this task and create a plan.
-        </Text>
+        <Box
+          display="flex"
+          alignItems="center"
+          justifyContent="space-between"
+          p={3}
+        >
+          <Text sx={{ fontWeight: "semibold", fontSize: 1 }}>Plan</Text>
+          <Button
+            size="small"
+            variant="default"
+            onClick={handlePlanTask}
+            disabled={!task}
+          >
+            Plan
+          </Button>
+        </Box>
         {planningError && (
-          <Box p={2} mb={3} backgroundColor="danger.subtle" border="1px solid" borderColor="danger.muted" borderRadius={2}>
+          <Box
+            borderTop="1px solid"
+            borderColor="border.default"
+            p={3}
+            backgroundColor="danger.subtle"
+          >
             <Text sx={{ fontSize: 0, color: "danger.fg" }}>{planningError}</Text>
           </Box>
         )}
-        <Button
-          size="medium"
-          variant="primary"
-          onClick={handlePlanTask}
-          disabled={!task}
-          sx={{ width: "100%" }}
-        >
-          Plan task
-        </Button>
       </Box>
     );
   }

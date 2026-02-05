@@ -122,9 +122,10 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
         display: 'flex',
         height: '100vh',
         overflow: 'hidden',
+        width: '100%',
       }}
     >
-      <div style={{ width: '320px', flexShrink: 0 }}>
+      <div style={{  flex: 1, overflow: 'hidden'  }}>
         <AgendaView events={events} onRefresh={loadTodayData} />
       </div>
       <div style={{ flex: 1, overflow: 'hidden' }}>

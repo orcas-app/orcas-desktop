@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { Box, Textarea, Button, Spinner } from "@primer/react";
-import { PaperAirplaneIcon } from "@primer/octicons-react";
+import { Textarea, Button, Spinner, ActionMenu, ActionList } from "@primer/react";
+import { PaperAirplaneIcon, ChevronDownIcon } from "@primer/octicons-react";
 import ReactMarkdown from "react-markdown";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import type { Agent, ChatMessage } from "../types";
-import { recordTaskAgentSession, startMCPServer, stopMCPServer, getSetting } from "../api";
+import { recordTaskAgentSession, startMCPServer, stopMCPServer, getSetting, getAllAgents } from "../api";
 import { withRetry } from "../utils/retry";
 
 interface ChatInterfaceProps {
@@ -26,6 +26,7 @@ function ChatInterface({ agent, taskId, onBack }: ChatInterfaceProps) {
   >({});
   const [mcpServerRunning, setMcpServerRunning] = useState(false);
   const [apiKey, setApiKey] = useState<string | null>(null);
+  const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -56,6 +57,7 @@ function ChatInterface({ agent, taskId, onBack }: ChatInterfaceProps) {
     loadPersistedMessages();
     initializeMCPServer();
     loadApiKey();
+    loadAgents();
 
     // Cleanup: stop MCP server when component unmounts
     return () => {
@@ -71,6 +73,17 @@ function ChatInterface({ agent, taskId, onBack }: ChatInterfaceProps) {
       setApiKey(savedApiKey);
     } catch (error) {
       console.error("Failed to load API key from settings:", error);
+    }
+  };
+
+  const loadAgents = async () => {
+    try {
+      const agents = await getAllAgents();
+      // Filter out system agents (those with system_role)
+      const userAgents = agents.filter(a => !a.system_role);
+      setAvailableAgents(userAgents);
+    } catch (error) {
+      console.error("Failed to load agents:", error);
     }
   };
 
@@ -709,17 +722,6 @@ The notes are stored in Markdown format and are task-specific.`;
 
   return (
     <div className="full-height">
-      {/* Chat Header */}
-      <div className="chat-header">
-        <div className="chat-header-left">
-          <div className="avatar">🤖</div>
-          <h3>{agent.name}</h3>
-        </div>
-        <Button size="small" onClick={onBack}>
-          Change Agent
-        </Button>
-      </div>
-
       {/* Messages */}
       <div ref={messagesContainerRef} className="chat-messages-container">
         {messages.length === 0 && !currentStreamingMessage && (
@@ -784,8 +786,8 @@ The notes are stored in Markdown format and are task-specific.`;
 
       {/* Input */}
       <div className="chat-input">
-        <Box display="flex" sx={{ gap: 2, alignItems: "flex-end" }}>
-          <Box flex={1}>
+        <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+          <div style={{ flex: 1 }}>
             <Textarea
               ref={textareaRef}
               value={input}
@@ -794,24 +796,60 @@ The notes are stored in Markdown format and are task-specific.`;
               placeholder={`Message ${agent.name}...`}
               resize="vertical"
               disabled={isStreaming}
-              sx={{
+              style={{
                 minHeight: 44,
                 maxHeight: 120,
+                width: "100%",
               }}
             />
-          </Box>
+          </div>
           <Button
             onClick={sendMessage}
             disabled={!input.trim() || isStreaming}
             leadingVisual={isStreaming ? Spinner : PaperAirplaneIcon}
             size="medium"
             variant="primary"
-            sx={{ minWidth: 80 }}
+            style={{ minWidth: 80 }}
           ></Button>
-        </Box>
-        <p className="chat-input-hint">
-          Press Cmd/Ctrl+Enter to send{isStreaming && " • Press Esc to cancel"}
-        </p>
+        </div>
+        <div style={{ marginTop: "10px", fontSize: "12px", color: "#57606a" }}>
+          <ActionMenu>
+            <ActionMenu.Anchor>
+              <Button
+                variant="invisible"
+                size="small"
+                trailingVisual={ChevronDownIcon}
+                style={{
+                  padding: "2px 8px",
+                  fontSize: "12px",
+                  color: "#57606a",
+                  fontWeight: "normal"
+                }}
+              >
+                {agent.name}
+              </Button>
+            </ActionMenu.Anchor>
+            <ActionMenu.Overlay>
+              <ActionList>
+                {availableAgents.map((a) => (
+                  <ActionList.Item
+                    key={a.id}
+                    onSelect={() => onBack()}
+                  >
+                    {a.name}
+                  </ActionList.Item>
+                ))}
+                {availableAgents.length > 0 && <ActionList.Divider />}
+                <ActionList.Item onSelect={() => onBack()}>
+                  Add new agent
+                </ActionList.Item>
+              </ActionList>
+            </ActionMenu.Overlay>
+          </ActionMenu>
+          {isStreaming && (
+            <span style={{ marginLeft: "8px" }}>• Press Esc to cancel</span>
+          )}
+        </div>
       </div>
 
     </div>

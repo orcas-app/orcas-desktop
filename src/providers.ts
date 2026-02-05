@@ -24,7 +24,7 @@ export interface ProviderMetadata {
 export const PROVIDERS: ProviderMetadata[] = [
   {
     id: 'anthropic',
-    name: 'Anthropic Direct API',
+    name: 'Anthropic API',
     description: 'Direct connection to Anthropic. Simple setup with just an API key.',
     settingsFields: [
       {
