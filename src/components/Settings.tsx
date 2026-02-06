@@ -14,11 +14,7 @@ import { getSetting, setSetting } from "../api";
 import { PROVIDERS, Provider } from "../providers";
 import CalendarSettings from "./CalendarSettings";
 
-interface SettingsProps {
-  onBack: () => void;
-}
-
-function Settings({ onBack }: SettingsProps) {
+function Settings() {
   const [selectedProvider, setSelectedProvider] = useState<Provider>('anthropic');
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);

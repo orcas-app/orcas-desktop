@@ -311,7 +311,7 @@ function App() {
         </div>
 
         {/* Main Content */}
-        {currentView === "settings" && <Settings onBack={() => handleNavigation("home")} />}
+        {currentView === "settings" && <Settings />}
         {currentView === "agents" && <AgentsManager onBack={() => handleNavigation("home")} />}
         {currentView === "today" && <TodayPage onTaskClick={(taskId) => setSelectedTaskId(taskId)} />}
         {currentView === "home" && (
