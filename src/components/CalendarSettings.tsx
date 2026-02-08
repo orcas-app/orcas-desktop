@@ -3,7 +3,7 @@ import { Text, Button, FormControl, Checkbox, Flash } from '@primer/react';
 import { CalendarIcon } from '@primer/octicons-react';
 import { platform } from '@tauri-apps/plugin-os';
 import type { Calendar, PermissionStatus } from '../types';
-import { requestCalendarPermission, getCalendarList } from '../api';
+import { requestCalendarPermission, getCalendarList, openCalendarSettings } from '../api';
 
 export default function CalendarSettings() {
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatus | null>(null);
@@ -12,6 +12,7 @@ export default function CalendarSettings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isMacOS, setIsMacOS] = useState<boolean>(true);
+  const [recheckLoading, setRecheckLoading] = useState(false);
 
   useEffect(() => {
     const platformName = platform();
@@ -68,6 +69,37 @@ export default function CalendarSettings() {
     }
   };
 
+  const handleRecheckPermission = async () => {
+    setRecheckLoading(true);
+    setError(null);
+    try {
+      const status = await requestCalendarPermission();
+      setPermissionStatus(status);
+
+      if (status === 'authorized') {
+        const calendarList = await getCalendarList();
+        setCalendars(calendarList);
+
+        const saved = localStorage.getItem('selected_calendar_ids');
+        if (saved) {
+          setSelectedCalendarIds(new Set(JSON.parse(saved)));
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to recheck permission');
+    } finally {
+      setRecheckLoading(false);
+    }
+  };
+
+  const handleOpenSystemSettings = async () => {
+    try {
+      await openCalendarSettings();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to open System Settings');
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ padding: '16px' }}>
@@ -113,17 +145,28 @@ export default function CalendarSettings() {
 
       {permissionStatus === 'denied' && (
         <div style={{ marginBottom: '16px' }}>
-          <Flash variant="danger">
+          <Flash variant="danger" style={{ marginBottom: '12px' }}>
             Calendar access denied. Please enable calendar access in System Settings.
           </Flash>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Button variant="primary" onClick={handleOpenSystemSettings}>
+              Open System Settings
+            </Button>
+            <Button onClick={handleRecheckPermission} disabled={recheckLoading}>
+              {recheckLoading ? 'Checking...' : 'Recheck Permission'}
+            </Button>
+          </div>
         </div>
       )}
 
       {permissionStatus === 'restricted' && (
         <div style={{ marginBottom: '16px' }}>
-          <Flash variant="warning">
+          <Flash variant="warning" style={{ marginBottom: '12px' }}>
             Calendar access is restricted by system policies.
           </Flash>
+          <Button onClick={handleRecheckPermission} disabled={recheckLoading}>
+            {recheckLoading ? 'Checking...' : 'Recheck Permission'}
+          </Button>
         </div>
       )}
 
@@ -184,10 +227,24 @@ export default function CalendarSettings() {
             </div>
           )}
 
-          <div style={{ marginTop: '12px' }}>
+          <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <Text color="fg.muted" style={{ fontSize: '12px' }}>
               {selectedCalendarIds.size} calendar{selectedCalendarIds.size !== 1 ? 's' : ''} selected
             </Text>
+          </div>
+
+          <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--borderColor-default)' }}>
+            <Text color="fg.muted" style={{ fontSize: '12px', display: 'block', marginBottom: '8px' }}>
+              If calendar events aren't showing up, try rechecking the permission or resetting it in System Settings.
+            </Text>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <Button size="small" onClick={handleRecheckPermission} disabled={recheckLoading}>
+                {recheckLoading ? 'Checking...' : 'Recheck Permission'}
+              </Button>
+              <Button size="small" onClick={handleOpenSystemSettings}>
+                Open System Settings
+              </Button>
+            </div>
           </div>
         </div>
       )}
