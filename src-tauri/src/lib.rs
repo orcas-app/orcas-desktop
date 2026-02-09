@@ -196,6 +196,22 @@ fn get_events_for_date(
     calendar::macos::get_events_for_date(calendar_ids, date)
 }
 
+#[tauri::command]
+fn open_calendar_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")
+            .spawn()
+            .map_err(|e| format!("Failed to open System Settings: {}", e))?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Calendar settings are only available on macOS".to_string())
+    }
+}
+
 // Today page task queries
 
 #[tauri::command]
@@ -417,6 +433,7 @@ pub fn run() {
             request_calendar_permission,
             get_calendar_list,
             get_events_for_date,
+            open_calendar_settings,
             get_tasks_scheduled_for_date,
             get_recently_edited_tasks
         ])

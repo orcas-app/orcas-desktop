@@ -600,6 +600,15 @@ export async function getEventsForDate(
   }
 }
 
+export async function openCalendarSettings(): Promise<void> {
+  try {
+    await invoke<void>("open_calendar_settings");
+  } catch (error) {
+    console.error("Failed to open calendar settings:", error);
+    throw error;
+  }
+}
+
 // Today page task queries
 export async function getTasksScheduledForDate(date: string): Promise<Task[]> {
   try {
