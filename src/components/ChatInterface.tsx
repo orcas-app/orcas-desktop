@@ -5,16 +5,17 @@ import ReactMarkdown from "react-markdown";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import type { Agent, ChatMessage } from "../types";
-import { recordTaskAgentSession, startMCPServer, stopMCPServer, getSetting, getAllAgents } from "../api";
+import { recordTaskAgentSession, startMCPServer, stopMCPServer, getSetting, getAllAgents, getProjectContext } from "../api";
 import { withRetry } from "../utils/retry";
 
 interface ChatInterfaceProps {
   agent: Agent;
   taskId: number;
+  projectId: number;
   onBack: () => void;
 }
 
-function ChatInterface({ agent, taskId, onBack }: ChatInterfaceProps) {
+function ChatInterface({ agent, taskId, projectId, onBack }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -27,6 +28,7 @@ function ChatInterface({ agent, taskId, onBack }: ChatInterfaceProps) {
   const [mcpServerRunning, setMcpServerRunning] = useState(false);
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
+  const [projectContext, setProjectContext] = useState<string>("");
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -58,6 +60,7 @@ function ChatInterface({ agent, taskId, onBack }: ChatInterfaceProps) {
     initializeMCPServer();
     loadApiKey();
     loadAgents();
+    loadProjectContext();
 
     // Cleanup: stop MCP server when component unmounts
     return () => {
@@ -84,6 +87,15 @@ function ChatInterface({ agent, taskId, onBack }: ChatInterfaceProps) {
       setAvailableAgents(userAgents);
     } catch (error) {
       console.error("Failed to load agents:", error);
+    }
+  };
+
+  const loadProjectContext = async () => {
+    try {
+      const context = await getProjectContext(projectId);
+      setProjectContext(context || "");
+    } catch (error) {
+      console.error("Failed to load project context:", error);
     }
   };
 
@@ -227,6 +239,29 @@ function ChatInterface({ agent, taskId, onBack }: ChatInterfaceProps) {
             ],
           };
 
+        case "update_project_context":
+          const { project_id: ctxProjectId, content: ctxContent, summary: ctxSummary } = args;
+          const actualProjectId = ctxProjectId || projectId;
+          try {
+            const { updateProjectContext } = await import("../api");
+            await updateProjectContext(actualProjectId, ctxContent);
+            // Refresh local project context state
+            setProjectContext(ctxContent);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Successfully updated project context for project ${actualProjectId}${ctxSummary ? `: ${ctxSummary}` : ""}`,
+                },
+              ],
+            };
+          } catch (error) {
+            console.error("Error in update_project_context:", error);
+            throw new Error(
+              `Failed to update project context: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
+          }
+
         default:
           throw new Error(`Unknown tool: ${toolName}`);
       }
@@ -295,6 +330,30 @@ function ChatInterface({ agent, taskId, onBack }: ChatInterfaceProps) {
           },
         },
         required: ["task_id"],
+      },
+    },
+    {
+      name: "update_project_context",
+      description:
+        "Update the shared project context markdown. Use this to record architectural decisions, completed milestones, and project-wide insights that are relevant to all tasks.",
+      input_schema: {
+        type: "object",
+        properties: {
+          project_id: {
+            type: "number",
+            description: "The ID of the project to update context for",
+          },
+          content: {
+            type: "string",
+            description:
+              "The full markdown content for the project context. This replaces the entire context.",
+          },
+          summary: {
+            type: "string",
+            description: "Brief summary of what was changed in the context",
+          },
+        },
+        required: ["project_id", "content"],
       },
     },
   ];
@@ -408,20 +467,27 @@ function ChatInterface({ agent, taskId, onBack }: ChatInterfaceProps) {
       });
 
       // Prepare the system message with information about the current task and available tools
-      const enhancedSystemMessage = `${agentPrompt || `You are ${agent.name}, a helpful AI assistant.`}
+      const projectContextSection = projectContext
+        ? `\n\n# Project Context\n\n${projectContext}\n\n---\n`
+        : "";
+
+      const enhancedSystemMessage = `${agentPrompt || `You are ${agent.name}, a helpful AI assistant.`}${projectContextSection}
 
 You are currently working on Task ID: ${taskId}. You have access to note-taking tools that allow you to:
 1. Read notes from previous sessions for this task
 2. Write or append new insights, findings, or progress to task notes
 3. Check if notes already exist for a task
+4. Update the shared project context with important insights
 
 These tools help you maintain context and continuity across conversations. Use them to:
 - Check for existing notes at the start of conversations
 - Save important insights, decisions, or findings
 - Track progress and next steps
 - Maintain continuity across different chat sessions
+- Update the project context when you make significant architectural decisions or complete major milestones
 
-The notes are stored in Markdown format and are task-specific.`;
+The notes are stored in Markdown format and are task-specific.
+The project context is shared across all tasks in the project.`;
 
       // Get response from Claude API via Tauri backend
       const modelName = agent.model_name || "claude-sonnet-4-5";

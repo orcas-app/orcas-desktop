@@ -14,6 +14,7 @@ mod providers;
 mod planning_agent;
 mod edit_locks;
 mod task_notes;
+mod project_context;
 mod calendar;
 #[derive(Debug, Serialize, Deserialize)]
 struct PlanningResult {
@@ -368,6 +369,12 @@ pub fn run() {
             sql: include_str!("../migrations/018_add_scheduled_date_to_tasks.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 19,
+            description: "add_project_context",
+            sql: include_str!("../migrations/019_add_project_context.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -430,6 +437,8 @@ pub fn run() {
             edit_locks::cleanup_stale_locks,
             task_notes::read_task_notes,
             task_notes::write_task_notes,
+            project_context::read_project_context,
+            project_context::write_project_context,
             request_calendar_permission,
             get_calendar_list,
             get_events_for_date,

@@ -3,6 +3,7 @@ export interface Project {
   title: string;
   description?: string;
   color: string;
+  context_markdown?: string;
   created_at: string;
   updated_at: string;
 }
