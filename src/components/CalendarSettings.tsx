@@ -192,16 +192,12 @@ export default function CalendarSettings() {
                     gap: '12px',
                   }}
                 >
-                  <FormControl>
-                    <Checkbox
-                      value={calendar.id}
-                      checked={selectedCalendarIds.has(calendar.id)}
-                      onChange={() => handleCalendarToggle(calendar.id)}
-                    />
-                    <FormControl.Label visuallyHidden>
-                      {calendar.title}
-                    </FormControl.Label>
-                  </FormControl>
+                  <Checkbox
+                    value={calendar.id}
+                    checked={selectedCalendarIds.has(calendar.id)}
+                    onChange={() => handleCalendarToggle(calendar.id)}
+                    aria-label={calendar.title}
+                  />
                   <div
                     style={{
                       width: '16px',
