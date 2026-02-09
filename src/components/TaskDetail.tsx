@@ -415,6 +415,7 @@ function TaskDetail({ task, projectName, onBack }: TaskDetailProps) {
               <ChatInterface
                 agent={selectedAgent}
                 taskId={task.id}
+                projectId={task.project_id}
                 onBack={handleBackToAgentSelection}
               />
             ) : (

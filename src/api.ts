@@ -85,6 +85,28 @@ export async function deleteProject(id: number): Promise<void> {
   await database.execute("DELETE FROM projects WHERE id = $1", [id]);
 }
 
+// Project context operations
+export async function getProjectContext(projectId: number): Promise<string> {
+  try {
+    return await invoke<string>("read_project_context", { projectId });
+  } catch (error) {
+    console.error("Failed to read project context:", error);
+    return "";
+  }
+}
+
+export async function updateProjectContext(
+  projectId: number,
+  content: string,
+): Promise<void> {
+  try {
+    await invoke("write_project_context", { projectId, content });
+  } catch (error) {
+    console.error("Failed to update project context:", error);
+    throw error;
+  }
+}
+
 // Task operations
 export async function getTasksByProject(
   projectId: number,

@@ -16,6 +16,12 @@ interface AgentNotesArgs {
   operation?: "append" | "replace";
 }
 
+interface ProjectContextArgs {
+  project_id: number;
+  content: string;
+  summary?: string;
+}
+
 class AgentNotesServer {
   private server: Server;
   private db: sqlite3.Database;
@@ -110,6 +116,30 @@ class AgentNotesServer {
               required: ["task_id", "content"],
             },
           },
+          {
+            name: "update_project_context",
+            description:
+              "Update the shared project context markdown. Use this to record architectural decisions, completed milestones, and project-wide insights.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                project_id: {
+                  type: "number",
+                  description: "The ID of the project to update context for",
+                },
+                content: {
+                  type: "string",
+                  description:
+                    "The full markdown content for the project context",
+                },
+                summary: {
+                  type: "string",
+                  description: "Brief summary of what was changed",
+                },
+              },
+              required: ["project_id", "content"],
+            },
+          },
         ] satisfies Tool[],
       };
     });
@@ -127,6 +157,8 @@ class AgentNotesServer {
             return await this.readTaskNotes(args as unknown as AgentNotesArgs);
           case "write_task_notes":
             return await this.writeTaskNotes(args as unknown as AgentNotesArgs);
+          case "update_project_context":
+            return await this.updateProjectContext(args as unknown as ProjectContextArgs);
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
@@ -212,6 +244,32 @@ class AgentNotesServer {
           {
             type: "text",
             text: `Successfully ${operation === "append" ? "appended to" : "wrote"} notes for task ${task_id} in database`,
+          },
+        ],
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  private async updateProjectContext(args: ProjectContextArgs) {
+    const { project_id, content, summary } = args;
+
+    if (!content) {
+      throw new Error("Content is required for update_project_context");
+    }
+
+    try {
+      await this.runDatabase(
+        "UPDATE projects SET context_markdown = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [content, project_id],
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully updated project context for project ${project_id}${summary ? `: ${summary}` : ""}`,
           },
         ],
       };
