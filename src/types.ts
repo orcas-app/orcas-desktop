@@ -59,10 +59,6 @@ export interface TaskWithSubTasks extends Task {
   subtasks: SubTask[];
 }
 
-export interface SpaceWithTasks extends Space {
-  tasks: TaskWithSubTasks[];
-}
-
 export interface Agent {
   id: number;
   name: string;
@@ -109,13 +105,6 @@ export interface ChatMessage {
   timestamp: Date;
   streaming?: boolean;
   usage?: TokenUsage; // Track token usage for each message
-}
-
-export interface ChatSession {
-  id: string;
-  agent: Agent;
-  messages: ChatMessage[];
-  isActive: boolean;
 }
 
 // Model information from provider APIs

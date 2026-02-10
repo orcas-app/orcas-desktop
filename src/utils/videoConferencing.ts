@@ -1,19 +1,11 @@
 import type { CalendarEvent } from '../types';
 
-/**
- * Video conferencing platform configuration
- */
-export interface VideoConferencingPlatform {
+interface VideoConferencingPlatform {
   name: string;
   urlPattern: RegExp;
-  iconName?: string;
 }
 
-/**
- * Supported video conferencing platforms with their URL patterns
- * This array can be easily extended to support additional platforms
- */
-export const VIDEO_CONFERENCING_PLATFORMS: VideoConferencingPlatform[] = [
+const VIDEO_CONFERENCING_PLATFORMS: VideoConferencingPlatform[] = [
   {
     name: 'Zoom',
     urlPattern: /https:\/\/[\w-]*\.?zoom\.us\/\S+/i,
@@ -84,21 +76,6 @@ export function removeVideoConferencingUrls(text: string): string {
 
   // Clean up extra whitespace
   return cleanedText.trim();
-}
-
-/**
- * Check if text contains a video conferencing URL
- *
- * @param text - Text to check
- * @returns true if text contains a video conferencing URL
- */
-export function containsVideoConferencingUrl(text: string): boolean {
-  for (const platform of VIDEO_CONFERENCING_PLATFORMS) {
-    if (platform.urlPattern.test(text)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /**

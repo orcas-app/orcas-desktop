@@ -437,26 +437,6 @@ export async function updateTaskNotesPath(taskId: number): Promise<string> {
   }
 }
 
-export async function getTaskNotesPath(taskId: number): Promise<string | null> {
-  try {
-    // Query the database for the actual notes path
-    const database = await getDb();
-    const result = await database.select<{ notes_file_path: string | null }[]>(
-      "SELECT notes_file_path FROM tasks WHERE id = $1",
-      [taskId],
-    );
-
-    if (result.length > 0) {
-      return result[0].notes_file_path;
-    }
-
-    return null;
-  } catch (error) {
-    console.error("Failed to get task notes path:", error);
-    throw error;
-  }
-}
-
 // Read task notes from database
 export async function readAgentNotes(taskId: number): Promise<string | null> {
   try {
@@ -510,19 +490,6 @@ export async function setSetting(key: string, value: string): Promise<void> {
   }
 }
 
-export async function deleteSetting(key: string): Promise<void> {
-  try {
-    const database = await getDb();
-    await database.execute(
-      "DELETE FROM settings WHERE key = $1",
-      [key]
-    );
-  } catch (error) {
-    console.error("Failed to delete setting:", error);
-    throw error;
-  }
-}
-
 // Task planning operations
 export async function startTaskPlanning(
   taskId: number,
@@ -560,30 +527,12 @@ export async function cancelTaskPlanning(taskId: number): Promise<string> {
   }
 }
 
-// Legacy function for backward compatibility
-export async function planTask(
-  taskId: number,
-  taskTitle: string,
-  taskDescription?: string,
-): Promise<string> {
-  return startTaskPlanning(taskId, taskTitle, taskDescription);
-}
-
 // Model operations
 export async function getAvailableModels(): Promise<ModelInfo[]> {
   try {
     return await invoke<ModelInfo[]>("get_available_models");
   } catch (error) {
     console.error("Failed to get available models:", error);
-    throw error;
-  }
-}
-
-export async function resolveModelId(friendlyName: string): Promise<string> {
-  try {
-    return await invoke<string>("resolve_model_id", { friendlyName });
-  } catch (error) {
-    console.error("Failed to resolve model ID:", error);
     throw error;
   }
 }

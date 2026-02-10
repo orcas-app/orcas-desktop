@@ -97,7 +97,3 @@ export const PROVIDERS: ProviderMetadata[] = [
    */
 ];
 
-// Helper function to get provider by ID
-export function getProvider(id: Provider): ProviderMetadata | undefined {
-  return PROVIDERS.find(p => p.id === id);
-}
