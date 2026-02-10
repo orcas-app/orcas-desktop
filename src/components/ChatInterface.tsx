@@ -732,6 +732,18 @@ The space context is shared across all tasks in the space.`;
     }
   };
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newValue = e.target.value;
+    setInput(newValue);
+
+    // Auto-expand textarea height based on content
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      const newHeight = Math.min(textareaRef.current.scrollHeight, 120);
+      textareaRef.current.style.height = newHeight + "px";
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
@@ -853,19 +865,21 @@ The space context is shared across all tasks in the space.`;
       {/* Input */}
       <div className="chat-input">
         <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <Textarea
               ref={textareaRef}
+              className="chat-textarea"
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder={`Message ${agent.name}...`}
-              resize="vertical"
+              resize="none"
               disabled={isStreaming}
               style={{
+                width: "100%",
                 minHeight: 44,
                 maxHeight: 120,
-                width: "100%",
+                overflow: "auto",
               }}
             />
           </div>
