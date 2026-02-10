@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { Heading, Button, Text } from "@primer/react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Heading, Button, Text, TextInput } from "@primer/react";
 import { getTasksBySpace, getSpaceContext, updateSpaceContext } from "../api";
 import type { Space, TaskWithSubTasks } from "../types";
 import StatusChip from "./StatusChip";
@@ -12,6 +12,8 @@ interface SpaceHomeProps {
   onShowNewTaskDialog: () => void;
   onShowNewSpaceDialog: () => void;
   refreshTrigger?: number; // Add optional prop to trigger refresh
+  onUpdateSpaceTitle: (spaceId: number, newTitle: string) => Promise<void>;
+  shouldEditSpaceTitle?: boolean; // Trigger edit mode for new spaces
 }
 
 // Rough token estimate: ~4 chars per token for English text
@@ -31,9 +33,15 @@ function SpaceHome({
   onShowNewTaskDialog,
   onShowNewSpaceDialog,
   refreshTrigger,
+  onUpdateSpaceTitle,
+  shouldEditSpaceTitle = false,
 }: SpaceHomeProps) {
   const [tasks, setTasks] = useState<TaskWithSubTasks[]>([]);
   const [contextContent, setContextContent] = useState("");
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState("");
+  const [titleError, setTitleError] = useState("");
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   // Show non-done tasks first, then done tasks at the end
   const sortedTasks = [
@@ -47,6 +55,22 @@ function SpaceHome({
       loadContext(selectedSpace.id);
     }
   }, [selectedSpace, refreshTrigger]); // Re-run when refreshTrigger changes
+
+  // Enter edit mode for new spaces
+  useEffect(() => {
+    if (shouldEditSpaceTitle && selectedSpace) {
+      setIsEditingTitle(true);
+      setEditedTitle(selectedSpace.title || "");
+      setTitleError("");
+    }
+  }, [shouldEditSpaceTitle, selectedSpace]);
+
+  // Focus the input when entering edit mode
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+    }
+  }, [isEditingTitle]);
 
   async function loadTasks(spaceId: number) {
     try {
@@ -78,6 +102,50 @@ function SpaceHome({
     }
   }, [selectedSpace]);
 
+  const handleTitleClick = () => {
+    if (selectedSpace) {
+      setIsEditingTitle(true);
+      setEditedTitle(selectedSpace.title || "");
+      setTitleError("");
+    }
+  };
+
+  const handleTitleSave = async () => {
+    if (!selectedSpace) return;
+
+    const trimmedTitle = editedTitle.trim();
+
+    if (!trimmedTitle) {
+      setTitleError("Name the space to get started");
+      return;
+    }
+
+    try {
+      await onUpdateSpaceTitle(selectedSpace.id, trimmedTitle);
+      setIsEditingTitle(false);
+      setTitleError("");
+    } catch (error) {
+      console.error("Failed to update space title:", error);
+      setTitleError("Failed to update title");
+    }
+  };
+
+  const handleTitleCancel = () => {
+    setIsEditingTitle(false);
+    setEditedTitle("");
+    setTitleError("");
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleTitleSave();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      handleTitleCancel();
+    }
+  };
+
   const tokenCount = estimateTokens(contextContent);
   const tokenColor = getTokenColor(tokenCount);
 
@@ -95,9 +163,59 @@ function SpaceHome({
               alignItems: "center",
             }}
           >
-            <Heading sx={{ fontSize: 4, color: selectedSpace.color }}>
-              {selectedSpace.title}
-            </Heading>
+            <div style={{ flex: 1, marginRight: "16px" }}>
+              {isEditingTitle ? (
+                <div>
+                  <TextInput
+                    ref={titleInputRef}
+                    value={editedTitle}
+                    onChange={(e) => {
+                      setEditedTitle(e.target.value);
+                      setTitleError("");
+                    }}
+                    onKeyDown={handleTitleKeyDown}
+                    onBlur={handleTitleSave}
+                    placeholder="Enter space name..."
+                    sx={{
+                      fontSize: 4,
+                      fontWeight: 600,
+                      color: selectedSpace.color,
+                      border: titleError ? "2px solid #cf222e" : "2px solid var(--borderColor-default, #d0d7de)",
+                      borderRadius: "6px",
+                      padding: "8px 12px",
+                      width: "100%",
+                      maxWidth: "500px",
+                    }}
+                  />
+                  {titleError && (
+                    <Text
+                      sx={{
+                        fontSize: 1,
+                        color: "#cf222e",
+                        display: "block",
+                        mt: 1,
+                      }}
+                    >
+                      {titleError}
+                    </Text>
+                  )}
+                </div>
+              ) : (
+                <Heading
+                  onClick={handleTitleClick}
+                  sx={{
+                    fontSize: 4,
+                    color: selectedSpace.color,
+                    cursor: "pointer",
+                    "&:hover": {
+                      opacity: 0.8,
+                    },
+                  }}
+                >
+                  {selectedSpace.title}
+                </Heading>
+              )}
+            </div>
             <Button variant="primary" onClick={onShowNewTaskDialog}>
               + Add Task
             </Button>

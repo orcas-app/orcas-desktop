@@ -24,6 +24,7 @@ import {
   createSpace,
   createTask,
   updateTask,
+  updateSpace,
 } from "./api";
 import type { Space, TaskWithSubTasks, NewSpace, NewTask } from "./types";
 import TaskDetail from "./components/TaskDetail";
@@ -37,8 +38,6 @@ function App() {
   const [selectedSpace, setSelectedSpace] = useState<Space | null>(null);
   const [tasks, setTasks] = useState<TaskWithSubTasks[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showNewSpaceDialog, setShowNewSpaceDialog] = useState(false);
-  const [newSpaceTitle, setNewSpaceTitle] = useState("");
   const [showNewTaskDialog, setShowNewTaskDialog] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
@@ -46,6 +45,7 @@ function App() {
   const [showAgents, setShowAgents] = useState(false);
   const [showToday, setShowToday] = useState(false);
   const [taskRefreshTrigger, setTaskRefreshTrigger] = useState(0);
+  const [shouldEditSpaceTitle, setShouldEditSpaceTitle] = useState(false);
 
   useEffect(() => {
     loadSpaces();
@@ -86,20 +86,32 @@ function App() {
   }
 
   async function handleCreateSpace() {
-    if (!newSpaceTitle.trim()) return;
-
     try {
-      console.log("Creating space with title:", newSpaceTitle);
-      const newSpace: NewSpace = { title: newSpaceTitle.trim() };
+      console.log("Creating new space with empty title");
+      const newSpace: NewSpace = { title: "" };
       const createdSpace = await createSpace(newSpace);
       console.log("Space created successfully:", createdSpace);
       setSpaces((prev) => [createdSpace, ...prev]);
       setSelectedSpace(createdSpace);
-      setShowNewSpaceDialog(false);
-      setNewSpaceTitle("");
+      setShouldEditSpaceTitle(true);
+      handleNavigation("home");
     } catch (error) {
       console.error("Failed to create space:", error);
       alert("Failed to create space: " + (error as Error).message);
+    }
+  }
+
+  async function handleUpdateSpaceTitle(spaceId: number, newTitle: string) {
+    try {
+      const updatedSpace = await updateSpace(spaceId, { title: newTitle });
+      setSpaces((prev) =>
+        prev.map((space) => (space.id === spaceId ? updatedSpace : space))
+      );
+      setSelectedSpace(updatedSpace);
+      setShouldEditSpaceTitle(false);
+    } catch (error) {
+      console.error("Failed to update space title:", error);
+      throw error;
     }
   }
 
@@ -205,6 +217,10 @@ function App() {
     setShowSettings(view === "settings");
     setShowAgents(view === "agents");
     setShowToday(view === "today");
+    // Reset edit mode when navigating away from home
+    if (view !== "home") {
+      setShouldEditSpaceTitle(false);
+    }
   };
 
   return (
@@ -271,7 +287,7 @@ function App() {
               <NavList.TrailingAction
                 label="New space"
                 icon={PlusIcon}
-                onClick={() => setShowNewSpaceDialog(true)}
+                onClick={handleCreateSpace}
               />
             </NavList.Item>
             <NavList.Item
@@ -290,6 +306,7 @@ function App() {
                 key={space.id}
                 onClick={() => {
                   setSelectedSpace(space);
+                  setShouldEditSpaceTitle(false);
                   handleNavigation("home");
                 }}
                 aria-current={currentView === "home" && selectedSpace?.id === space.id ? "page" : undefined}
@@ -319,65 +336,13 @@ function App() {
             selectedSpace={selectedSpace}
             onTaskClick={(taskId) => setSelectedTaskId(taskId)}
             onShowNewTaskDialog={() => setShowNewTaskDialog(true)}
-            onShowNewSpaceDialog={() => setShowNewSpaceDialog(true)}
+            onShowNewSpaceDialog={handleCreateSpace}
             refreshTrigger={taskRefreshTrigger}
+            onUpdateSpaceTitle={handleUpdateSpaceTitle}
+            shouldEditSpaceTitle={shouldEditSpaceTitle}
           />
         )}
       </div>
-
-      {showNewSpaceDialog && (
-        <Dialog
-          title="Create New Space"
-          onClose={() => {
-            setShowNewSpaceDialog(false);
-            setNewSpaceTitle("");
-          }}
-          sx={{
-            backgroundColor: "canvas.default",
-            border: "1px solid",
-            borderColor: "border.default",
-            borderRadius: 2,
-            boxShadow: "shadow.large",
-          }}
-        >
-          <div
-            style={{
-              padding: "16px",
-              backgroundColor: "var(--bgColor-default, #ffffff)",
-            }}
-          >
-            <TextInput
-              placeholder="Enter space title..."
-              value={newSpaceTitle}
-              onChange={(e) => setNewSpaceTitle(e.target.value)}
-              sx={{ width: "100%", mb: 3 }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleCreateSpace();
-                }
-              }}
-            />
-            <ButtonGroup>
-              <Button
-                variant="primary"
-                onClick={handleCreateSpace}
-                disabled={!newSpaceTitle.trim()}
-              >
-                Create Space
-              </Button>
-              <Button
-                onClick={() => {
-                  setShowNewSpaceDialog(false);
-                  setNewSpaceTitle("");
-                }}
-              >
-                Cancel
-              </Button>
-            </ButtonGroup>
-          </div>
-        </Dialog>
-      )}
 
       {showNewTaskDialog && (
         <Dialog
