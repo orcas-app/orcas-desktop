@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Text, Button, FormControl, Checkbox, Flash } from '@primer/react';
+import { Text, Button, Checkbox, Flash } from '@primer/react';
 import { CalendarIcon } from '@primer/octicons-react';
 import { platform } from '@tauri-apps/plugin-os';
 import type { Calendar, PermissionStatus } from '../types';

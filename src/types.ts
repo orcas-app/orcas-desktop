@@ -1,4 +1,4 @@
-export interface Project {
+export interface Space {
   id: number;
   title: string;
   description?: string;
@@ -8,7 +8,7 @@ export interface Project {
   updated_at: string;
 }
 
-export interface NewProject {
+export interface NewSpace {
   title: string;
   description?: string;
   color?: string;
@@ -16,7 +16,7 @@ export interface NewProject {
 
 export interface Task {
   id: number;
-  project_id: number;
+  space_id: number;
   title: string;
   description?: string;
   status: 'todo' | 'in_progress' | 'for_review' | 'done';
@@ -29,7 +29,7 @@ export interface Task {
 }
 
 export interface NewTask {
-  project_id: number;
+  space_id: number;
   title: string;
   description?: string;
   status?: 'todo' | 'in_progress' | 'for_review' | 'done';
@@ -59,7 +59,7 @@ export interface TaskWithSubTasks extends Task {
   subtasks: SubTask[];
 }
 
-export interface ProjectWithTasks extends Project {
+export interface SpaceWithTasks extends Space {
   tasks: TaskWithSubTasks[];
 }
 

@@ -19,26 +19,26 @@ import {
   StarIcon,
 } from "@primer/octicons-react";
 import {
-  getAllProjects,
-  getTasksByProject,
-  createProject,
+  getAllSpaces,
+  getTasksBySpace,
+  createSpace,
   createTask,
   updateTask,
 } from "./api";
-import type { Project, TaskWithSubTasks, NewProject, NewTask } from "./types";
+import type { Space, TaskWithSubTasks, NewSpace, NewTask } from "./types";
 import TaskDetail from "./components/TaskDetail";
 import Settings from "./components/Settings";
 import AgentsManager from "./components/AgentsManager";
-import ProjectHome from "./components/ProjectHome";
+import SpaceHome from "./components/SpaceHome";
 import TodayPage from "./components/TodayPage";
 
 function App() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [selectedSpace, setSelectedSpace] = useState<Space | null>(null);
   const [tasks, setTasks] = useState<TaskWithSubTasks[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
-  const [newProjectTitle, setNewProjectTitle] = useState("");
+  const [showNewSpaceDialog, setShowNewSpaceDialog] = useState(false);
+  const [newSpaceTitle, setNewSpaceTitle] = useState("");
   const [showNewTaskDialog, setShowNewTaskDialog] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
@@ -48,36 +48,36 @@ function App() {
   const [taskRefreshTrigger, setTaskRefreshTrigger] = useState(0);
 
   useEffect(() => {
-    loadProjects();
+    loadSpaces();
   }, []);
 
   useEffect(() => {
-    if (selectedProject) {
-      loadTasks(selectedProject.id);
+    if (selectedSpace) {
+      loadTasks(selectedSpace.id);
     }
-  }, [selectedProject]);
+  }, [selectedSpace]);
 
-  async function loadProjects() {
+  async function loadSpaces() {
     try {
-      console.log("Loading projects...");
+      console.log("Loading spaces...");
       setLoading(true);
-      const fetchedProjects = await getAllProjects();
-      console.log("Projects loaded:", fetchedProjects);
-      setProjects(fetchedProjects);
-      if (fetchedProjects.length > 0 && !selectedProject) {
-        setSelectedProject(fetchedProjects[0]);
+      const fetchedSpaces = await getAllSpaces();
+      console.log("Spaces loaded:", fetchedSpaces);
+      setSpaces(fetchedSpaces);
+      if (fetchedSpaces.length > 0 && !selectedSpace) {
+        setSelectedSpace(fetchedSpaces[0]);
       }
     } catch (error) {
-      console.error("Failed to load projects:", error);
-      alert("Failed to load projects: " + (error as Error).message);
+      console.error("Failed to load spaces:", error);
+      alert("Failed to load spaces: " + (error as Error).message);
     } finally {
       setLoading(false);
     }
   }
 
-  async function loadTasks(projectId: number) {
+  async function loadTasks(spaceId: number) {
     try {
-      const fetchedTasks = await getTasksByProject(projectId);
+      const fetchedTasks = await getTasksBySpace(spaceId);
       setTasks(fetchedTasks);
     } catch (error) {
       console.error("Failed to load tasks:", error);
@@ -85,21 +85,21 @@ function App() {
     }
   }
 
-  async function handleCreateProject() {
-    if (!newProjectTitle.trim()) return;
+  async function handleCreateSpace() {
+    if (!newSpaceTitle.trim()) return;
 
     try {
-      console.log("Creating project with title:", newProjectTitle);
-      const newProject: NewProject = { title: newProjectTitle.trim() };
-      const createdProject = await createProject(newProject);
-      console.log("Project created successfully:", createdProject);
-      setProjects((prev) => [createdProject, ...prev]);
-      setSelectedProject(createdProject);
-      setShowNewProjectDialog(false);
-      setNewProjectTitle("");
+      console.log("Creating space with title:", newSpaceTitle);
+      const newSpace: NewSpace = { title: newSpaceTitle.trim() };
+      const createdSpace = await createSpace(newSpace);
+      console.log("Space created successfully:", createdSpace);
+      setSpaces((prev) => [createdSpace, ...prev]);
+      setSelectedSpace(createdSpace);
+      setShowNewSpaceDialog(false);
+      setNewSpaceTitle("");
     } catch (error) {
-      console.error("Failed to create project:", error);
-      alert("Failed to create project: " + (error as Error).message);
+      console.error("Failed to create space:", error);
+      alert("Failed to create space: " + (error as Error).message);
     }
   }
 
@@ -107,14 +107,14 @@ function App() {
     title: string,
     status: "todo" | "in_progress" | "for_review" | "done" = "todo",
   ) {
-    if (!selectedProject) {
-      console.error("No selected project for task creation");
+    if (!selectedSpace) {
+      console.error("No selected space for task creation");
       return;
     }
 
     try {
       const newTask: NewTask = {
-        project_id: selectedProject.id,
+        space_id: selectedSpace.id,
         title,
         status,
       };
@@ -137,7 +137,7 @@ function App() {
     try {
       await handleCreateTask(newTaskTitle.trim());
 
-      // Trigger refresh in ProjectHome component
+      // Trigger refresh in SpaceHome component
       setTaskRefreshTrigger((prev) => prev + 1);
 
       setShowNewTaskDialog(false);
@@ -189,7 +189,7 @@ function App() {
       return (
         <TaskDetail
           task={selectedTask}
-          projectName={selectedProject?.title || ""}
+          spaceName={selectedSpace?.title || ""}
           onBack={() => setSelectedTaskId(null)}
           onUpdateTask={handleUpdateTask}
         />
@@ -269,9 +269,9 @@ function App() {
             <NavList.Item>
               Work
               <NavList.TrailingAction
-                label="New project"
+                label="New space"
                 icon={PlusIcon}
-                onClick={() => setShowNewProjectDialog(true)}
+                onClick={() => setShowNewSpaceDialog(true)}
               />
             </NavList.Item>
             <NavList.Item
@@ -285,26 +285,26 @@ function App() {
                 Today
               </NavList.Item>
 
-            {projects.map((project) => (
+            {spaces.map((space) => (
               <NavList.Item
-                key={project.id}
+                key={space.id}
                 onClick={() => {
-                  setSelectedProject(project);
+                  setSelectedSpace(space);
                   handleNavigation("home");
                 }}
-                aria-current={currentView === "home" && selectedProject?.id === project.id ? "page" : undefined}
+                aria-current={currentView === "home" && selectedSpace?.id === space.id ? "page" : undefined}
               >
                 <NavList.LeadingVisual>
                   <div
                     style={{
                       width: "12px",
                       height: "12px",
-                      backgroundColor: project.color,
+                      backgroundColor: space.color,
                       borderRadius: "2px",
                     }}
                   />
                 </NavList.LeadingVisual>
-                {project.title}
+                {space.title}
               </NavList.Item>
             ))}
           </NavList>
@@ -315,22 +315,22 @@ function App() {
         {currentView === "agents" && <AgentsManager onBack={() => handleNavigation("home")} />}
         {currentView === "today" && <TodayPage onTaskClick={(taskId) => setSelectedTaskId(taskId)} />}
         {currentView === "home" && (
-          <ProjectHome
-            selectedProject={selectedProject}
+          <SpaceHome
+            selectedSpace={selectedSpace}
             onTaskClick={(taskId) => setSelectedTaskId(taskId)}
             onShowNewTaskDialog={() => setShowNewTaskDialog(true)}
-            onShowNewProjectDialog={() => setShowNewProjectDialog(true)}
+            onShowNewSpaceDialog={() => setShowNewSpaceDialog(true)}
             refreshTrigger={taskRefreshTrigger}
           />
         )}
       </div>
 
-      {showNewProjectDialog && (
+      {showNewSpaceDialog && (
         <Dialog
-          title="Create New Project"
+          title="Create New Space"
           onClose={() => {
-            setShowNewProjectDialog(false);
-            setNewProjectTitle("");
+            setShowNewSpaceDialog(false);
+            setNewSpaceTitle("");
           }}
           sx={{
             backgroundColor: "canvas.default",
@@ -347,29 +347,29 @@ function App() {
             }}
           >
             <TextInput
-              placeholder="Enter project title..."
-              value={newProjectTitle}
-              onChange={(e) => setNewProjectTitle(e.target.value)}
+              placeholder="Enter space title..."
+              value={newSpaceTitle}
+              onChange={(e) => setNewSpaceTitle(e.target.value)}
               sx={{ width: "100%", mb: 3 }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-                  handleCreateProject();
+                  handleCreateSpace();
                 }
               }}
             />
             <ButtonGroup>
               <Button
                 variant="primary"
-                onClick={handleCreateProject}
-                disabled={!newProjectTitle.trim()}
+                onClick={handleCreateSpace}
+                disabled={!newSpaceTitle.trim()}
               >
-                Create Project
+                Create Space
               </Button>
               <Button
                 onClick={() => {
-                  setShowNewProjectDialog(false);
-                  setNewProjectTitle("");
+                  setShowNewSpaceDialog(false);
+                  setNewSpaceTitle("");
                 }}
               >
                 Cancel

@@ -5,17 +5,17 @@ import ReactMarkdown from "react-markdown";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import type { Agent, ChatMessage } from "../types";
-import { recordTaskAgentSession, startMCPServer, stopMCPServer, getSetting, getAllAgents, getProjectContext } from "../api";
+import { recordTaskAgentSession, startMCPServer, stopMCPServer, getSetting, getAllAgents, getSpaceContext } from "../api";
 import { withRetry } from "../utils/retry";
 
 interface ChatInterfaceProps {
   agent: Agent;
   taskId: number;
-  projectId: number;
+  spaceId: number;
   onBack: () => void;
 }
 
-function ChatInterface({ agent, taskId, projectId, onBack }: ChatInterfaceProps) {
+function ChatInterface({ agent, taskId, spaceId, onBack }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -28,7 +28,7 @@ function ChatInterface({ agent, taskId, projectId, onBack }: ChatInterfaceProps)
   const [mcpServerRunning, setMcpServerRunning] = useState(false);
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
-  const [projectContext, setProjectContext] = useState<string>("");
+  const [spaceContext, setSpaceContext] = useState<string>("");
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -60,7 +60,7 @@ function ChatInterface({ agent, taskId, projectId, onBack }: ChatInterfaceProps)
     initializeMCPServer();
     loadApiKey();
     loadAgents();
-    loadProjectContext();
+    loadSpaceContext();
 
     // Cleanup: stop MCP server when component unmounts
     return () => {
@@ -90,12 +90,12 @@ function ChatInterface({ agent, taskId, projectId, onBack }: ChatInterfaceProps)
     }
   };
 
-  const loadProjectContext = async () => {
+  const loadSpaceContext = async () => {
     try {
-      const context = await getProjectContext(projectId);
-      setProjectContext(context || "");
+      const context = await getSpaceContext(spaceId);
+      setSpaceContext(context || "");
     } catch (error) {
-      console.error("Failed to load project context:", error);
+      console.error("Failed to load space context:", error);
     }
   };
 
@@ -239,26 +239,26 @@ function ChatInterface({ agent, taskId, projectId, onBack }: ChatInterfaceProps)
             ],
           };
 
-        case "update_project_context":
-          const { project_id: ctxProjectId, content: ctxContent, summary: ctxSummary } = args;
-          const actualProjectId = ctxProjectId || projectId;
+        case "update_space_context":
+          const { space_id: ctxSpaceId, content: ctxContent, summary: ctxSummary } = args;
+          const actualSpaceId = ctxSpaceId || spaceId;
           try {
-            const { updateProjectContext } = await import("../api");
-            await updateProjectContext(actualProjectId, ctxContent);
-            // Refresh local project context state
-            setProjectContext(ctxContent);
+            const { updateSpaceContext } = await import("../api");
+            await updateSpaceContext(actualSpaceId, ctxContent);
+            // Refresh local space context state
+            setSpaceContext(ctxContent);
             return {
               content: [
                 {
                   type: "text",
-                  text: `Successfully updated project context for project ${actualProjectId}${ctxSummary ? `: ${ctxSummary}` : ""}`,
+                  text: `Successfully updated space context for space ${actualSpaceId}${ctxSummary ? `: ${ctxSummary}` : ""}`,
                 },
               ],
             };
           } catch (error) {
-            console.error("Error in update_project_context:", error);
+            console.error("Error in update_space_context:", error);
             throw new Error(
-              `Failed to update project context: ${error instanceof Error ? error.message : "Unknown error"}`,
+              `Failed to update space context: ${error instanceof Error ? error.message : "Unknown error"}`,
             );
           }
 
@@ -333,27 +333,27 @@ function ChatInterface({ agent, taskId, projectId, onBack }: ChatInterfaceProps)
       },
     },
     {
-      name: "update_project_context",
+      name: "update_space_context",
       description:
-        "Update the shared project context markdown. Use this to record architectural decisions, completed milestones, and project-wide insights that are relevant to all tasks.",
+        "Update the shared space context markdown. Use this to record architectural decisions, completed milestones, and space-wide insights that are relevant to all tasks.",
       input_schema: {
         type: "object",
         properties: {
-          project_id: {
+          space_id: {
             type: "number",
-            description: "The ID of the project to update context for",
+            description: "The ID of the space to update context for",
           },
           content: {
             type: "string",
             description:
-              "The full markdown content for the project context. This replaces the entire context.",
+              "The full markdown content for the space context. This replaces the entire context.",
           },
           summary: {
             type: "string",
             description: "Brief summary of what was changed in the context",
           },
         },
-        required: ["project_id", "content"],
+        required: ["space_id", "content"],
       },
     },
   ];
@@ -467,27 +467,27 @@ function ChatInterface({ agent, taskId, projectId, onBack }: ChatInterfaceProps)
       });
 
       // Prepare the system message with information about the current task and available tools
-      const projectContextSection = projectContext
-        ? `\n\n# Project Context\n\n${projectContext}\n\n---\n`
+      const spaceContextSection = spaceContext
+        ? `\n\n# Space Context\n\n${spaceContext}\n\n---\n`
         : "";
 
-      const enhancedSystemMessage = `${agentPrompt || `You are ${agent.name}, a helpful AI assistant.`}${projectContextSection}
+      const enhancedSystemMessage = `${agentPrompt || `You are ${agent.name}, a helpful AI assistant.`}${spaceContextSection}
 
 You are currently working on Task ID: ${taskId}. You have access to note-taking tools that allow you to:
 1. Read notes from previous sessions for this task
 2. Write or append new insights, findings, or progress to task notes
 3. Check if notes already exist for a task
-4. Update the shared project context with important insights
+4. Update the shared space context with important insights
 
 These tools help you maintain context and continuity across conversations. Use them to:
 - Check for existing notes at the start of conversations
 - Save important insights, decisions, or findings
 - Track progress and next steps
 - Maintain continuity across different chat sessions
-- Update the project context when you make significant architectural decisions or complete major milestones
+- Update the space context when you make significant architectural decisions or complete major milestones
 
 The notes are stored in Markdown format and are task-specific.
-The project context is shared across all tasks in the project.`;
+The space context is shared across all tasks in the space.`;
 
       // Get response from Claude API via Tauri backend
       const modelName = agent.model_name || "claude-sonnet-4-5";

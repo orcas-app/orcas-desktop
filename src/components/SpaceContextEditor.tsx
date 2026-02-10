@@ -3,11 +3,11 @@ import { MDXEditor, headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugi
 import '@mdxeditor/editor/style.css';
 import { Button } from '@primer/react';
 import { ArrowLeftIcon } from '@primer/octicons-react';
-import { getProjectContext, updateProjectContext } from '../api';
+import { getSpaceContext, updateSpaceContext } from '../api';
 
-interface ProjectContextEditorProps {
-  projectId: number;
-  projectTitle: string;
+interface SpaceContextEditorProps {
+  spaceId: number;
+  spaceTitle: string;
   onClose: () => void;
 }
 
@@ -22,21 +22,21 @@ function getTokenColor(tokens: number): string {
   return '#cf222e'; // red
 }
 
-export default function ProjectContextEditor({ projectId, projectTitle, onClose }: ProjectContextEditorProps) {
+export default function SpaceContextEditor({ spaceId, spaceTitle, onClose }: SpaceContextEditorProps) {
   const [content, setContent] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     loadContext();
-  }, [projectId]);
+  }, [spaceId]);
 
   const loadContext = async () => {
     try {
       setIsLoading(true);
-      const contextContent = await getProjectContext(projectId);
+      const contextContent = await getSpaceContext(spaceId);
       setContent(contextContent || '');
     } catch (error) {
-      console.error('Failed to load project context:', error);
+      console.error('Failed to load space context:', error);
       setContent('');
     } finally {
       setIsLoading(false);
@@ -45,11 +45,11 @@ export default function ProjectContextEditor({ projectId, projectTitle, onClose 
 
   const saveContext = useCallback(async (newContent: string) => {
     try {
-      await updateProjectContext(projectId, newContent);
+      await updateSpaceContext(spaceId, newContent);
     } catch (error) {
-      console.error('Failed to save project context:', error);
+      console.error('Failed to save space context:', error);
     }
-  }, [projectId]);
+  }, [spaceId]);
 
   const tokenCount = estimateTokens(content);
   const tokenColor = getTokenColor(tokenCount);
@@ -68,7 +68,7 @@ export default function ProjectContextEditor({ projectId, projectTitle, onClose 
         alignItems: 'center',
         justifyContent: 'center'
       }}>
-        <div>Loading project context...</div>
+        <div>Loading space context...</div>
       </div>
     );
   }
@@ -98,11 +98,11 @@ export default function ProjectContextEditor({ projectId, projectTitle, onClose 
           onClick={onClose}
           leadingVisual={ArrowLeftIcon}
         >
-          Back to Project
+          Back to Space
         </Button>
         <div style={{ flex: 1 }}>
           <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 600 }}>
-            Project Context - {projectTitle}
+            Space Context - {spaceTitle}
           </h2>
         </div>
         <div style={{

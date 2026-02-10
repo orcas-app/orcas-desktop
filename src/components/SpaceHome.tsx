@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { Heading, Button, Text } from "@primer/react";
-import { getTasksByProject, getProjectContext, updateProjectContext } from "../api";
-import type { Project, TaskWithSubTasks } from "../types";
+import { getTasksBySpace, getSpaceContext, updateSpaceContext } from "../api";
+import type { Space, TaskWithSubTasks } from "../types";
 import StatusChip from "./StatusChip";
 import { MDXEditor, headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin, markdownShortcutPlugin } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
 
-interface ProjectHomeProps {
-  selectedProject: Project | null;
+interface SpaceHomeProps {
+  selectedSpace: Space | null;
   onTaskClick: (taskId: number) => void;
   onShowNewTaskDialog: () => void;
-  onShowNewProjectDialog: () => void;
+  onShowNewSpaceDialog: () => void;
   refreshTrigger?: number; // Add optional prop to trigger refresh
 }
 
@@ -25,13 +25,13 @@ function getTokenColor(tokens: number): string {
   return '#cf222e'; // red
 }
 
-function ProjectHome({
-  selectedProject,
+function SpaceHome({
+  selectedSpace,
   onTaskClick,
   onShowNewTaskDialog,
-  onShowNewProjectDialog,
+  onShowNewSpaceDialog,
   refreshTrigger,
-}: ProjectHomeProps) {
+}: SpaceHomeProps) {
   const [tasks, setTasks] = useState<TaskWithSubTasks[]>([]);
   const [contextContent, setContextContent] = useState("");
 
@@ -42,15 +42,15 @@ function ProjectHome({
   ];
 
   useEffect(() => {
-    if (selectedProject) {
-      loadTasks(selectedProject.id);
-      loadContext(selectedProject.id);
+    if (selectedSpace) {
+      loadTasks(selectedSpace.id);
+      loadContext(selectedSpace.id);
     }
-  }, [selectedProject, refreshTrigger]); // Re-run when refreshTrigger changes
+  }, [selectedSpace, refreshTrigger]); // Re-run when refreshTrigger changes
 
-  async function loadTasks(projectId: number) {
+  async function loadTasks(spaceId: number) {
     try {
-      const fetchedTasks = await getTasksByProject(projectId);
+      const fetchedTasks = await getTasksBySpace(spaceId);
       setTasks(fetchedTasks);
     } catch (error) {
       console.error("Failed to load tasks:", error);
@@ -58,34 +58,34 @@ function ProjectHome({
     }
   }
 
-  async function loadContext(projectId: number) {
+  async function loadContext(spaceId: number) {
     try {
-      const context = await getProjectContext(projectId);
+      const context = await getSpaceContext(spaceId);
       setContextContent(context || "");
     } catch (error) {
-      console.error("Failed to load project context:", error);
+      console.error("Failed to load space context:", error);
       setContextContent("");
     }
   }
 
   const saveContext = useCallback(async (newContent: string) => {
-    if (selectedProject) {
+    if (selectedSpace) {
       try {
-        await updateProjectContext(selectedProject.id, newContent);
+        await updateSpaceContext(selectedSpace.id, newContent);
       } catch (error) {
-        console.error('Failed to save project context:', error);
+        console.error('Failed to save space context:', error);
       }
     }
-  }, [selectedProject]);
+  }, [selectedSpace]);
 
   const tokenCount = estimateTokens(contextContent);
   const tokenColor = getTokenColor(tokenCount);
 
   return (
     <div style={{ flex: 1, overflow: "auto" }}>
-      {selectedProject && (
+      {selectedSpace && (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-          {/* Header with project title and Add Task button */}
+          {/* Header with space title and Add Task button */}
           <div
             style={{
               padding: "24px 32px",
@@ -95,8 +95,8 @@ function ProjectHome({
               alignItems: "center",
             }}
           >
-            <Heading sx={{ fontSize: 4, color: selectedProject.color }}>
-              {selectedProject.title}
+            <Heading sx={{ fontSize: 4, color: selectedSpace.color }}>
+              {selectedSpace.title}
             </Heading>
             <Button variant="primary" onClick={onShowNewTaskDialog}>
               + Add Task
@@ -112,7 +112,7 @@ function ProjectHome({
             flex: 1,
             overflow: "hidden"
           }}>
-            {/* Left column: Project Context */}
+            {/* Left column: Space Context */}
             <div style={{
               display: "flex",
               flexDirection: "column",
@@ -140,7 +140,7 @@ function ProjectHome({
                     margin: 0,
                   }}
                 >
-                  Project Context
+                  Space Context
                 </Heading>
                 <div style={{
                   fontSize: '13px',
@@ -207,7 +207,7 @@ function ProjectHome({
                     style={{
                       backgroundColor: "var(--bgColor-default, #ffffff)",
                       border: "1px solid var(--borderColor-default, #d0d7de)",
-                      borderLeft: `4px solid ${selectedProject.color}`,
+                      borderLeft: `4px solid ${selectedSpace.color}`,
                       borderRadius: "6px",
                       padding: "16px",
                       cursor: "pointer",
@@ -263,7 +263,7 @@ function ProjectHome({
         </div>
       )}
 
-      {!selectedProject && (
+      {!selectedSpace && (
         <div
           style={{
             display: "flex",
@@ -278,14 +278,14 @@ function ProjectHome({
             Welcome to Orcas
           </Heading>
           <Text sx={{ fontSize: 2, color: "fg.muted", mb: 4 }}>
-            Create your first project to get started!
+            Create your first space to get started!
           </Text>
           <Button
             variant="primary"
             size="large"
-            onClick={onShowNewProjectDialog}
+            onClick={onShowNewSpaceDialog}
           >
-            Create First Project
+            Create First Space
           </Button>
         </div>
       )}
@@ -293,4 +293,4 @@ function ProjectHome({
   );
 }
 
-export default ProjectHome;
+export default SpaceHome;

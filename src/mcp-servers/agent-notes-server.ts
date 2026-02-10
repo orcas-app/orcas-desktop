@@ -16,8 +16,8 @@ interface AgentNotesArgs {
   operation?: "append" | "replace";
 }
 
-interface ProjectContextArgs {
-  project_id: number;
+interface SpaceContextArgs {
+  space_id: number;
   content: string;
   summary?: string;
 }
@@ -117,27 +117,27 @@ class AgentNotesServer {
             },
           },
           {
-            name: "update_project_context",
+            name: "update_space_context",
             description:
-              "Update the shared project context markdown. Use this to record architectural decisions, completed milestones, and project-wide insights.",
+              "Update the shared space context markdown. Use this to record architectural decisions, completed milestones, and space-wide insights.",
             inputSchema: {
               type: "object",
               properties: {
-                project_id: {
+                space_id: {
                   type: "number",
-                  description: "The ID of the project to update context for",
+                  description: "The ID of the space to update context for",
                 },
                 content: {
                   type: "string",
                   description:
-                    "The full markdown content for the project context",
+                    "The full markdown content for the space context",
                 },
                 summary: {
                   type: "string",
                   description: "Brief summary of what was changed",
                 },
               },
-              required: ["project_id", "content"],
+              required: ["space_id", "content"],
             },
           },
         ] satisfies Tool[],
@@ -157,8 +157,8 @@ class AgentNotesServer {
             return await this.readTaskNotes(args as unknown as AgentNotesArgs);
           case "write_task_notes":
             return await this.writeTaskNotes(args as unknown as AgentNotesArgs);
-          case "update_project_context":
-            return await this.updateProjectContext(args as unknown as ProjectContextArgs);
+          case "update_space_context":
+            return await this.updateSpaceContext(args as unknown as SpaceContextArgs);
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
@@ -252,24 +252,24 @@ class AgentNotesServer {
     }
   }
 
-  private async updateProjectContext(args: ProjectContextArgs) {
-    const { project_id, content, summary } = args;
+  private async updateSpaceContext(args: SpaceContextArgs) {
+    const { space_id, content, summary } = args;
 
     if (!content) {
-      throw new Error("Content is required for update_project_context");
+      throw new Error("Content is required for update_space_context");
     }
 
     try {
       await this.runDatabase(
-        "UPDATE projects SET context_markdown = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        [content, project_id],
+        "UPDATE spaces SET context_markdown = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [content, space_id],
       );
 
       return {
         content: [
           {
             type: "text",
-            text: `Successfully updated project context for project ${project_id}${summary ? `: ${summary}` : ""}`,
+            text: `Successfully updated space context for space ${space_id}${summary ? `: ${summary}` : ""}`,
           },
         ],
       };

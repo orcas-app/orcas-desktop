@@ -32,12 +32,12 @@ import { getLastUsedAgentForTask } from "../api";
 
 interface TaskDetailProps {
   task: TaskWithSubTasks;
-  projectName: string;
+  spaceName: string;
   onBack: () => void;
   onUpdateTask?: (taskId: number, updates: Partial<TaskWithSubTasks>) => void;
 }
 
-function TaskDetail({ task, projectName, onBack }: TaskDetailProps) {
+function TaskDetail({ task, spaceName, onBack }: TaskDetailProps) {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [documentContent, setDocumentContent] = useState<string>("");
   const [isLoadingDocument, setIsLoadingDocument] = useState(true);
@@ -310,7 +310,7 @@ function TaskDetail({ task, projectName, onBack }: TaskDetailProps) {
           onClick={onBack}
           sx={{ mb: 2, ml: -2, color: "fg.muted" }}
         >
-          {projectName}
+          {spaceName}
         </Button>
         <div className="heading-container">
           <Heading sx={{ fontSize: 3, fontWeight: 600 }}>{task.title}</Heading>
@@ -415,7 +415,7 @@ function TaskDetail({ task, projectName, onBack }: TaskDetailProps) {
               <ChatInterface
                 agent={selectedAgent}
                 taskId={task.id}
-                projectId={task.project_id}
+                spaceId={task.space_id}
                 onBack={handleBackToAgentSelection}
               />
             ) : (

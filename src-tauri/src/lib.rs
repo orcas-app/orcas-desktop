@@ -14,7 +14,7 @@ mod providers;
 mod planning_agent;
 mod edit_locks;
 mod task_notes;
-mod project_context;
+mod space_context;
 mod calendar;
 #[derive(Debug, Serialize, Deserialize)]
 struct PlanningResult {
@@ -223,7 +223,7 @@ async fn get_tasks_scheduled_for_date(
 
     sqlx::query_as::<_, database::Task>(
         r#"
-        SELECT id, project_id, title, description, status, priority,
+        SELECT id, space_id, title, description, status, priority,
                due_date, scheduled_date, created_at, updated_at
         FROM tasks
         WHERE scheduled_date = ?
@@ -244,7 +244,7 @@ async fn get_recently_edited_tasks(
 
     sqlx::query_as::<_, database::Task>(
         r#"
-        SELECT id, project_id, title, description, status, priority,
+        SELECT id, space_id, title, description, status, priority,
                due_date, scheduled_date, created_at, updated_at
         FROM tasks
         WHERE status != 'done'
@@ -375,6 +375,12 @@ pub fn run() {
             sql: include_str!("../migrations/019_add_project_context.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 20,
+            description: "rename_projects_to_spaces",
+            sql: include_str!("../migrations/020_rename_projects_to_spaces.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -437,8 +443,8 @@ pub fn run() {
             edit_locks::cleanup_stale_locks,
             task_notes::read_task_notes,
             task_notes::write_task_notes,
-            project_context::read_project_context,
-            project_context::write_project_context,
+            space_context::read_space_context,
+            space_context::write_space_context,
             request_calendar_permission,
             get_calendar_list,
             get_events_for_date,

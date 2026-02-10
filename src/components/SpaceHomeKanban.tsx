@@ -1,22 +1,22 @@
 import { useState, useEffect } from "react";
 import { Box, Heading, Button, Text } from "@primer/react";
-import { getTasksByProject } from "../api";
-import type { Project, TaskWithSubTasks } from "../types";
+import { getTasksBySpace } from "../api";
+import type { Space, TaskWithSubTasks } from "../types";
 import StatusChip from "./StatusChip";
 
-interface ProjectHomeProps {
-  selectedProject: Project | null;
+interface SpaceHomeProps {
+  selectedSpace: Space | null;
   onTaskClick: (taskId: number) => void;
   onShowNewTaskDialog: () => void;
-  onShowNewProjectDialog: () => void;
+  onShowNewSpaceDialog: () => void;
 }
 
-function ProjectHome({
-  selectedProject,
+function SpaceHome({
+  selectedSpace,
   onTaskClick,
   onShowNewTaskDialog,
-  onShowNewProjectDialog,
-}: ProjectHomeProps) {
+  onShowNewSpaceDialog,
+}: SpaceHomeProps) {
   const [tasks, setTasks] = useState<TaskWithSubTasks[]>([]);
 
   const todoTasks = tasks.filter((task) => task.status === "todo");
@@ -25,14 +25,14 @@ function ProjectHome({
   const doneTasks = tasks.filter((task) => task.status === "done");
 
   useEffect(() => {
-    if (selectedProject) {
-      loadTasks(selectedProject.id);
+    if (selectedSpace) {
+      loadTasks(selectedSpace.id);
     }
-  }, [selectedProject]);
+  }, [selectedSpace]);
 
-  async function loadTasks(projectId: number) {
+  async function loadTasks(spaceId: number) {
     try {
-      const fetchedTasks = await getTasksByProject(projectId);
+      const fetchedTasks = await getTasksBySpace(spaceId);
       setTasks(fetchedTasks);
     } catch (error) {
       console.error("Failed to load tasks:", error);
@@ -42,7 +42,7 @@ function ProjectHome({
 
   return (
     <Box flex={1}>
-      {selectedProject && (
+      {selectedSpace && (
         <Box p={4}>
           <Box
             display="flex"
@@ -50,8 +50,8 @@ function ProjectHome({
             alignItems="center"
             mb={4}
           >
-            <Heading sx={{ fontSize: 4, color: selectedProject.color }}>
-              {selectedProject.title}
+            <Heading sx={{ fontSize: 4, color: selectedSpace.color }}>
+              {selectedSpace.title}
             </Heading>
             <Button variant="primary" onClick={onShowNewTaskDialog}>
               + Add Task
@@ -264,7 +264,7 @@ function ProjectHome({
         </Box>
       )}
 
-      {!selectedProject && (
+      {!selectedSpace && (
         <Box
           display="flex"
           flexDirection="column"
@@ -277,14 +277,14 @@ function ProjectHome({
             Welcome to Orcas
           </Heading>
           <Text sx={{ fontSize: 2, color: "fg.muted", mb: 4 }}>
-            Create your first project to get started!
+            Create your first space to get started!
           </Text>
           <Button
             variant="primary"
             size="large"
-            onClick={onShowNewProjectDialog}
+            onClick={onShowNewSpaceDialog}
           >
-            Create First Project
+            Create First Space
           </Button>
         </Box>
       )}
@@ -292,4 +292,4 @@ function ProjectHome({
   );
 }
 
-export default ProjectHome;
+export default SpaceHome;

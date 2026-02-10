@@ -1,8 +1,8 @@
 import Database from "@tauri-apps/plugin-sql";
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  Project,
-  NewProject,
+  Space,
+  NewSpace,
   Task,
   NewTask,
   SubTask,
@@ -26,96 +26,96 @@ async function getDb(): Promise<Database> {
   return db;
 }
 
-// Project operations
-export async function getAllProjects(): Promise<Project[]> {
+// Space operations
+export async function getAllSpaces(): Promise<Space[]> {
   const database = await getDb();
-  const result = await database.select<Project[]>(
-    "SELECT * FROM projects ORDER BY created_at DESC",
+  const result = await database.select<Space[]>(
+    "SELECT * FROM spaces ORDER BY created_at DESC",
   );
   return result;
 }
 
-export async function createProject(project: NewProject): Promise<Project> {
+export async function createSpace(space: NewSpace): Promise<Space> {
   const database = await getDb();
-  const color = project.color || "#3B82F6";
+  const color = space.color || "#3B82F6";
 
   const result = await database.execute(
-    "INSERT INTO projects (title, description, color) VALUES ($1, $2, $3)",
-    [project.title, project.description || null, color],
+    "INSERT INTO spaces (title, description, color) VALUES ($1, $2, $3)",
+    [space.title, space.description || null, color],
   );
 
-  const createdProject = await database.select<Project[]>(
-    "SELECT * FROM projects WHERE id = $1",
+  const createdSpace = await database.select<Space[]>(
+    "SELECT * FROM spaces WHERE id = $1",
     [result.lastInsertId],
   );
 
-  if (createdProject.length === 0) {
-    throw new Error("Failed to retrieve created project");
+  if (createdSpace.length === 0) {
+    throw new Error("Failed to retrieve created space");
   }
 
-  return createdProject[0];
+  return createdSpace[0];
 }
 
-export async function updateProject(
+export async function updateSpace(
   id: number,
-  project: NewProject,
-): Promise<Project> {
+  space: NewSpace,
+): Promise<Space> {
   const database = await getDb();
-  const color = project.color || "#3B82F6";
+  const color = space.color || "#3B82F6";
 
   await database.execute(
-    "UPDATE projects SET title = $1, description = $2, color = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4",
-    [project.title, project.description || null, color, id],
+    "UPDATE spaces SET title = $1, description = $2, color = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4",
+    [space.title, space.description || null, color, id],
   );
 
-  const updatedProject = await database.select<Project[]>(
-    "SELECT * FROM projects WHERE id = $1",
+  const updatedSpace = await database.select<Space[]>(
+    "SELECT * FROM spaces WHERE id = $1",
     [id],
   );
 
-  if (updatedProject.length === 0) {
-    throw new Error("Failed to retrieve updated project");
+  if (updatedSpace.length === 0) {
+    throw new Error("Failed to retrieve updated space");
   }
 
-  return updatedProject[0];
+  return updatedSpace[0];
 }
 
-export async function deleteProject(id: number): Promise<void> {
+export async function deleteSpace(id: number): Promise<void> {
   const database = await getDb();
-  await database.execute("DELETE FROM projects WHERE id = $1", [id]);
+  await database.execute("DELETE FROM spaces WHERE id = $1", [id]);
 }
 
-// Project context operations
-export async function getProjectContext(projectId: number): Promise<string> {
+// Space context operations
+export async function getSpaceContext(spaceId: number): Promise<string> {
   try {
-    return await invoke<string>("read_project_context", { projectId });
+    return await invoke<string>("read_space_context", { spaceId });
   } catch (error) {
-    console.error("Failed to read project context:", error);
+    console.error("Failed to read space context:", error);
     return "";
   }
 }
 
-export async function updateProjectContext(
-  projectId: number,
+export async function updateSpaceContext(
+  spaceId: number,
   content: string,
 ): Promise<void> {
   try {
-    await invoke("write_project_context", { projectId, content });
+    await invoke("write_space_context", { spaceId, content });
   } catch (error) {
-    console.error("Failed to update project context:", error);
+    console.error("Failed to update space context:", error);
     throw error;
   }
 }
 
 // Task operations
-export async function getTasksByProject(
-  projectId: number,
+export async function getTasksBySpace(
+  spaceId: number,
 ): Promise<TaskWithSubTasks[]> {
   const database = await getDb();
 
   const tasks = await database.select<Task[]>(
-    "SELECT * FROM tasks WHERE project_id = $1 ORDER BY created_at DESC",
-    [projectId],
+    "SELECT * FROM tasks WHERE space_id = $1 ORDER BY created_at DESC",
+    [spaceId],
   );
 
   const tasksWithSubTasks: TaskWithSubTasks[] = [];
@@ -138,9 +138,9 @@ export async function createTask(task: NewTask): Promise<Task> {
   const priority = task.priority || "medium";
 
   const result = await database.execute(
-    "INSERT INTO tasks (project_id, title, description, status, priority, due_date) VALUES ($1, $2, $3, $4, $5, $6)",
+    "INSERT INTO tasks (space_id, title, description, status, priority, due_date) VALUES ($1, $2, $3, $4, $5, $6)",
     [
-      task.project_id,
+      task.space_id,
       task.title,
       task.description || null,
       status,

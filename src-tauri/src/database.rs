@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-// Project-related structs
+// Space-related structs
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Project {
+pub struct Space {
     pub id: i64,
     pub title: String,
     pub description: Option<String>,
@@ -12,7 +12,7 @@ pub struct Project {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct NewProject {
+pub struct NewSpace {
     pub title: String,
     pub description: Option<String>,
     pub color: Option<String>,
@@ -22,7 +22,7 @@ pub struct NewProject {
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Task {
     pub id: i64,
-    pub project_id: i64,
+    pub space_id: i64,
     pub title: String,
     pub description: Option<String>,
     pub status: String,
@@ -35,7 +35,7 @@ pub struct Task {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewTask {
-    pub project_id: i64,
+    pub space_id: i64,
     pub title: String,
     pub description: Option<String>,
     pub status: Option<String>,
@@ -71,9 +71,9 @@ pub struct TaskWithSubTasks {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ProjectWithTasks {
+pub struct SpaceWithTasks {
     #[serde(flatten)]
-    pub project: Project,
+    pub space: Space,
     pub tasks: Vec<TaskWithSubTasks>,
 }
 
