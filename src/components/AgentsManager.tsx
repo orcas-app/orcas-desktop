@@ -1,10 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
-  Box,
   Heading,
   Text,
   TextInput,
-  Textarea,
   Button,
   Flash,
   ActionList,
@@ -18,6 +16,8 @@ import {
 } from "@primer/react";
 import { PlusIcon, TrashIcon, GearIcon } from "@primer/octicons-react";
 import { getAllAgents, createAgent, updateAgent, deleteAgent, getAvailableModels } from "../api";
+import { MDXEditor, headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin, markdownShortcutPlugin } from '@mdxeditor/editor';
+import '@mdxeditor/editor/style.css';
 import type { Agent, ModelInfo } from "../types";
 
 interface AgentsManagerProps {
@@ -55,12 +55,8 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
   const [editWebSearch, setEditWebSearch] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
-  // New agent dialog state
-  const [showNewAgentDialog, setShowNewAgentDialog] = useState(false);
-  const [newAgentName, setNewAgentName] = useState("");
-  const [newAgentModel, setNewAgentModel] = useState(FALLBACK_MODELS[0].display_name);
-  const [newAgentPrompt, setNewAgentPrompt] = useState("");
-  const [newAgentWebSearch, setNewAgentWebSearch] = useState(false);
+  // Key to force MDXEditor re-render when agent selection changes
+  const [editorKey, setEditorKey] = useState(0);
 
   // Delete confirmation dialog state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -80,12 +76,9 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
       const models = await getAvailableModels();
       if (models.length > 0) {
         setAvailableModels(models);
-        // Update default model for new agents to first available
-        setNewAgentModel(models[0].display_name);
       }
     } catch (err) {
       console.error("Failed to load models, using fallback:", err);
-      // Keep using fallback models
     } finally {
       setIsLoadingModels(false);
     }
@@ -98,12 +91,12 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
       setEditPrompt(selectedAgent.agent_prompt);
       setEditWebSearch(!!selectedAgent.web_search_enabled);
       setHasChanges(false);
+      setEditorKey((prev) => prev + 1);
     }
   }, [selectedAgent]);
 
   useEffect(() => {
     if (selectedAgent) {
-      // For system agents, name changes don't count (name is not editable)
       const isSystem = isSystemAgent(selectedAgent);
       const nameChanged = !isSystem && editName !== selectedAgent.name;
       const modelChanged = editModel !== selectedAgent.model_name;
@@ -117,12 +110,10 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
     try {
       setIsLoading(true);
       const fetchedAgents = await getAllAgents();
-      // Separate system agents from user agents
       const system = fetchedAgents.filter((agent) => agent.system_role);
       const user = fetchedAgents.filter((agent) => !agent.system_role);
       setSystemAgents(system);
       setUserAgents(user);
-      // Select first system agent if available, otherwise first user agent
       if (!selectedAgent) {
         if (system.length > 0) {
           setSelectedAgent(system[0]);
@@ -148,7 +139,6 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
 
       const isSystem = isSystemAgent(selectedAgent);
 
-      // For system agents, don't update the name
       const updatedAgent = await updateAgent(selectedAgent.id, {
         name: isSystem ? selectedAgent.name : editName.trim(),
         model_name: editModel,
@@ -156,7 +146,6 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
         web_search_enabled: editWebSearch,
       });
 
-      // Update the correct list
       if (isSystem) {
         setSystemAgents((prev) =>
           prev.map((agent) =>
@@ -182,23 +171,18 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
   };
 
   const handleCreateAgent = async () => {
-    if (!newAgentName.trim()) return;
-
     try {
+      setError(null);
+      const defaultModel = availableModels[0]?.display_name || FALLBACK_MODELS[0].display_name;
       const createdAgent = await createAgent(
-        newAgentName.trim(),
-        newAgentModel,
-        newAgentPrompt.trim() || "You are a helpful assistant.",
-        newAgentWebSearch,
+        "New Agent",
+        defaultModel,
+        "You are a helpful assistant.",
+        false,
       );
 
       setUserAgents((prev) => [...prev, createdAgent].sort((a, b) => a.name.localeCompare(b.name)));
       setSelectedAgent(createdAgent);
-      setShowNewAgentDialog(false);
-      setNewAgentName("");
-      setNewAgentModel(availableModels[0]?.display_name || FALLBACK_MODELS[0].display_name);
-      setNewAgentPrompt("");
-      setNewAgentWebSearch(false);
     } catch (err) {
       console.error("Failed to create agent:", err);
       setError("Failed to create agent. Please try again.");
@@ -238,6 +222,10 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
     setShowDeleteDialog(true);
   };
 
+  const handlePromptChange = useCallback((newContent: string) => {
+    setEditPrompt(newContent);
+  }, []);
+
   const renderAgentListItem = (agent: Agent, showDeleteOption: boolean) => (
     <ActionList.Item
       key={agent.id}
@@ -245,16 +233,17 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
       onSelect={() => setSelectedAgent(agent)}
     >
       <ActionList.LeadingVisual>
-        <Box
-          sx={{
+        <span
+          style={{
+            display: "inline-block",
             width: 8,
             height: 8,
             borderRadius: "50%",
-            backgroundColor: agent.system_role ? "done.fg" : "accent.fg",
+            backgroundColor: agent.system_role ? "var(--fgColor-done)" : "var(--fgColor-accent)",
           }}
         />
       </ActionList.LeadingVisual>
-      <Box>
+      <span>
         <Text sx={{ fontWeight: "medium" }}>{agent.name}</Text>
         <Text
           sx={{
@@ -266,7 +255,7 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
           {availableModels.find((m) => m.display_name === agent.model_name || m.id === agent.model_name)?.display_label ||
             agent.model_name}
         </Text>
-      </Box>
+      </span>
       {showDeleteOption && (
         <ActionList.TrailingVisual>
           <ActionMenu>
@@ -300,53 +289,56 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
   );
 
   return (
-    <Box flex={1} display="flex" flexDirection="column" sx={{ overflow: "hidden" }}>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* Header */}
-      <Box
-        p={3}
-        borderBottom="1px solid"
-        borderColor="border.default"
-        display="flex"
-        alignItems="center"
-        justifyContent="space-between"
+      <div
+        style={{
+          padding: 16,
+          borderBottom: "1px solid var(--borderColor-default)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
       >
         <Heading sx={{ fontSize: 3 }}>Agents</Heading>
-      </Box>
+      </div>
 
       {/* Content */}
-      <Box display="flex" flex={1} sx={{ overflow: "hidden" }}>
+      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         {/* Agent List Sidebar */}
-        <Box
-          width={280}
-          borderRight="1px solid"
-          borderColor="border.default"
-          display="flex"
-          flexDirection="column"
-          backgroundColor="canvas.subtle"
+        <div
+          style={{
+            width: 280,
+            borderRight: "1px solid var(--borderColor-default)",
+            display: "flex",
+            flexDirection: "column",
+            backgroundColor: "var(--bgColor-muted)",
+          }}
         >
-          <Box flex={1} sx={{ overflowY: "auto" }}>
+          <div style={{ flex: 1, overflowY: "auto" }}>
             {isLoading ? (
-              <Box p={3}>
+              <div style={{ padding: 16 }}>
                 <Text sx={{ color: "fg.muted", fontSize: 1 }}>Loading...</Text>
-              </Box>
+              </div>
             ) : (
               <>
                 {/* System Agents Section */}
                 {systemAgents.length > 0 && (
                   <>
-                    <Box
-                      p={2}
-                      borderBottom="1px solid"
-                      borderColor="border.default"
-                      display="flex"
-                      alignItems="center"
-                      gap={2}
+                    <div
+                      style={{
+                        padding: 8,
+                        borderBottom: "1px solid var(--borderColor-default)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
                     >
                       <GearIcon size={16} />
                       <Text sx={{ fontWeight: "semibold", fontSize: 1 }}>
                         System Agents
                       </Text>
-                    </Box>
+                    </div>
                     <ActionList>
                       {systemAgents.map((agent) => renderAgentListItem(agent, false))}
                     </ActionList>
@@ -354,13 +346,14 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
                 )}
 
                 {/* User Agents Section */}
-                <Box
-                  p={2}
-                  borderBottom="1px solid"
-                  borderColor="border.default"
-                  display="flex"
-                  alignItems="center"
-                  justifyContent="space-between"
+                <div
+                  style={{
+                    padding: 8,
+                    borderBottom: "1px solid var(--borderColor-default)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
                 >
                   <Text sx={{ fontWeight: "semibold", fontSize: 1 }}>
                     Your Agents
@@ -368,18 +361,18 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
                   <Button
                     size="small"
                     leadingVisual={PlusIcon}
-                    onClick={() => setShowNewAgentDialog(true)}
+                    onClick={handleCreateAgent}
                   >
                     New
                   </Button>
-                </Box>
+                </div>
 
                 {userAgents.length === 0 ? (
-                  <Box p={3}>
+                  <div style={{ padding: 16 }}>
                     <Text sx={{ color: "fg.muted", fontSize: 1 }}>
                       No agents yet. Create one to get started.
                     </Text>
-                  </Box>
+                  </div>
                 ) : (
                   <ActionList>
                     {userAgents.map((agent) => renderAgentListItem(agent, true))}
@@ -387,11 +380,11 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
                 )}
               </>
             )}
-          </Box>
-        </Box>
+          </div>
+        </div>
 
         {/* Agent Editor */}
-        <Box flex={1} p={4} sx={{ overflowY: "auto" }}>
+        <div style={{ flex: 1, padding: 24, overflowY: "auto" }}>
           {showSuccess && (
             <Flash variant="success" sx={{ mb: 3 }}>
               Agent saved successfully!
@@ -406,16 +399,16 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
 
           {selectedAgent ? (
             <>
-              <Box display="flex" alignItems="center" gap={2} mb={3}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
                 <Heading sx={{ fontSize: 2 }}>Edit Agent</Heading>
                 {isSystemAgent(selectedAgent) && (
                   <Label variant="success">
                     {SYSTEM_ROLE_LABELS[selectedAgent.system_role!] || selectedAgent.system_role}
                   </Label>
                 )}
-              </Box>
+              </div>
 
-              <Box mb={3}>
+              <div style={{ marginBottom: 16 }}>
                 <FormControl>
                   <FormControl.Label>Name</FormControl.Label>
                   {isSystemAgent(selectedAgent) ? (
@@ -438,9 +431,9 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
                     />
                   )}
                 </FormControl>
-              </Box>
+              </div>
 
-              <Box mb={3}>
+              <div style={{ marginBottom: 16 }}>
                 <FormControl>
                   <FormControl.Label>Model</FormControl.Label>
                   <Select
@@ -481,9 +474,9 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
                     return null;
                   })()}
                 </FormControl>
-              </Box>
+              </div>
 
-              <Box mb={3}>
+              <div style={{ marginBottom: 16 }}>
                 <FormControl>
                   <Checkbox
                     checked={editWebSearch}
@@ -495,167 +488,74 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
                     Allow this agent to search the web for up-to-date information. Uses the Anthropic web search API.
                   </FormControl.Caption>
                 </FormControl>
-              </Box>
+              </div>
 
-              <Box mb={4}>
+              <div style={{ marginBottom: 24 }}>
                 <FormControl>
                   <FormControl.Label>System Prompt</FormControl.Label>
-                  <Textarea
-                    value={editPrompt}
-                    onChange={(e) => setEditPrompt(e.target.value)}
-                    rows={12}
-                    sx={{ width: "100%", fontFamily: "mono", fontSize: 1 }}
-                    disabled={isSaving}
-                  />
+                  <div
+                    style={{
+                      border: "1px solid var(--borderColor-default)",
+                      borderRadius: 6,
+                      minHeight: 200,
+                    }}
+                  >
+                    <MDXEditor
+                      key={editorKey}
+                      markdown={editPrompt}
+                      onChange={handlePromptChange}
+                      plugins={[
+                        headingsPlugin(),
+                        listsPlugin(),
+                        quotePlugin(),
+                        thematicBreakPlugin(),
+                        markdownShortcutPlugin(),
+                      ]}
+                      contentEditableClassName="mdx-editor-content"
+                    />
+                  </div>
                   <FormControl.Caption>
                     Instructions that define how this agent behaves. This is sent
                     as the system prompt to the AI model.
                   </FormControl.Caption>
                 </FormControl>
-              </Box>
+              </div>
 
-              <Button
-                variant="primary"
-                onClick={handleSave}
-                disabled={isSaving || !hasChanges || (!isSystemAgent(selectedAgent) && !editName.trim())}
-              >
-                {isSaving ? "Saving..." : "Save Changes"}
-              </Button>
-
-              {hasChanges && (
-                <Text
-                  sx={{ ml: 2, fontSize: 1, color: "attention.fg" }}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Button
+                  variant="primary"
+                  onClick={handleSave}
+                  disabled={isSaving || !hasChanges || (!isSystemAgent(selectedAgent) && !editName.trim())}
                 >
-                  Unsaved changes
-                </Text>
-              )}
+                  {isSaving ? "Saving..." : "Save Changes"}
+                </Button>
+
+                {hasChanges && (
+                  <Text
+                    sx={{ fontSize: 1, color: "attention.fg" }}
+                  >
+                    Unsaved changes
+                  </Text>
+                )}
+              </div>
             </>
           ) : (
-            <Box
-              display="flex"
-              flexDirection="column"
-              alignItems="center"
-              justifyContent="center"
-              height="100%"
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                height: "100%",
+              }}
             >
               <Text sx={{ color: "fg.muted", fontSize: 1 }}>
                 Select an agent to edit, or create a new one.
               </Text>
-            </Box>
+            </div>
           )}
-        </Box>
-      </Box>
-
-      {/* New Agent Dialog */}
-      {showNewAgentDialog && (
-        <Dialog
-          title="Create New Agent"
-          onClose={() => {
-            setShowNewAgentDialog(false);
-            setNewAgentName("");
-            setNewAgentModel(availableModels[0]?.display_name || FALLBACK_MODELS[0].display_name);
-            setNewAgentPrompt("");
-            setNewAgentWebSearch(false);
-          }}
-          sx={{
-            backgroundColor: "canvas.default",
-            border: "1px solid",
-            borderColor: "border.default",
-            borderRadius: 2,
-            boxShadow: "shadow.large",
-          }}
-        >
-          <Box p={3}>
-            <Box mb={3}>
-              <FormControl>
-                <FormControl.Label>Name</FormControl.Label>
-                <TextInput
-                  value={newAgentName}
-                  onChange={(e) => setNewAgentName(e.target.value)}
-                  placeholder="e.g., Code Reviewer"
-                  sx={{ width: "100%" }}
-                />
-              </FormControl>
-            </Box>
-
-            <Box mb={3}>
-              <FormControl>
-                <FormControl.Label>Model</FormControl.Label>
-                <Select
-                  value={newAgentModel}
-                  onChange={(e) => setNewAgentModel(e.target.value)}
-                  disabled={isLoadingModels}
-                >
-                  {availableModels.map((model) => (
-                    <Select.Option key={model.display_name} value={model.display_name}>
-                      {model.display_label}
-                    </Select.Option>
-                  ))}
-                </Select>
-                {isLoadingModels ? (
-                  <FormControl.Caption>Loading models...</FormControl.Caption>
-                ) : (() => {
-                    const selectedModel = availableModels.find(
-                      (m) => m.display_name === newAgentModel
-                    );
-                    if (selectedModel && !selectedModel.supports_tools) {
-                      return (
-                        <FormControl.Caption>
-                          This model does not support tool calling. Agent features like reading/writing task notes will not work.
-                        </FormControl.Caption>
-                      );
-                    }
-                    return null;
-                  })()}
-              </FormControl>
-            </Box>
-
-            <Box mb={3}>
-              <FormControl>
-                <FormControl.Label>System Prompt (optional)</FormControl.Label>
-                <Textarea
-                  value={newAgentPrompt}
-                  onChange={(e) => setNewAgentPrompt(e.target.value)}
-                  placeholder="Describe how this agent should behave..."
-                  rows={4}
-                  sx={{ width: "100%" }}
-                />
-              </FormControl>
-            </Box>
-
-            <Box mb={3}>
-              <FormControl>
-                <Checkbox
-                  checked={newAgentWebSearch}
-                  onChange={(e) => setNewAgentWebSearch(e.target.checked)}
-                />
-                <FormControl.Label>Enable web search</FormControl.Label>
-              </FormControl>
-            </Box>
-
-            <ButtonGroup>
-              <Button
-                variant="primary"
-                onClick={handleCreateAgent}
-                disabled={!newAgentName.trim()}
-              >
-                Create Agent
-              </Button>
-              <Button
-                onClick={() => {
-                  setShowNewAgentDialog(false);
-                  setNewAgentName("");
-                  setNewAgentModel(availableModels[0]?.display_name || FALLBACK_MODELS[0].display_name);
-                  setNewAgentPrompt("");
-                  setNewAgentWebSearch(false);
-                }}
-              >
-                Cancel
-              </Button>
-            </ButtonGroup>
-          </Box>
-        </Dialog>
-      )}
+        </div>
+      </div>
 
       {/* Delete Confirmation Dialog */}
       {showDeleteDialog && agentToDelete && (
@@ -673,7 +573,7 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
             boxShadow: "shadow.large",
           }}
         >
-          <Box p={3}>
+          <div style={{ padding: 16 }}>
             <Text sx={{ display: "block", mb: 3 }}>
               Are you sure you want to delete "{agentToDelete.name}"? This action
               cannot be undone.
@@ -691,10 +591,10 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
                 Cancel
               </Button>
             </ButtonGroup>
-          </Box>
+          </div>
         </Dialog>
       )}
-    </Box>
+    </div>
   );
 }
 

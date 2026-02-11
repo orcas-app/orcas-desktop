@@ -7,6 +7,7 @@ import { emit } from "@tauri-apps/api/event";
 import type { Agent, ChatMessage } from "../types";
 import { recordTaskAgentSession, startMCPServer, stopMCPServer, getSetting, getAllAgents, getSpaceContext, checkModelSupportsTools } from "../api";
 import { withRetry } from "../utils/retry";
+import { compactMessages } from "../utils/tokenEstimation";
 
 interface ChatInterfaceProps {
   agent: Agent;
@@ -466,6 +467,11 @@ function ChatInterface({ agent, taskId, spaceId, onBack }: ChatInterfaceProps) {
         content: trimmedInput,
       });
 
+      // Compact conversation history to stay within token budget.
+      // This only affects what is sent to the API -- the full history
+      // remains visible in the UI via the `messages` state.
+      const compactedMessages = compactMessages(conversationMessages);
+
       // Prepare the system message with information about the current task and available tools
       const spaceContextSection = spaceContext
         ? `\n\n# Space Context\n\n${spaceContext}\n\n---\n`
@@ -518,7 +524,7 @@ The space context is shared across all tasks in the space.`;
       let responseText: string = await withRetry(
         () => invoke<string>("send_chat_message", {
           model: modelName,
-          messages: conversationMessages,
+          messages: compactedMessages,
           system: enhancedSystemMessage,
           maxTokens: maxTokens,
           tools: toolsToSend,
@@ -541,7 +547,7 @@ The space context is shared across all tasks in the space.`;
 
       // Handle tool calls in a loop until we get a final text response
       // Track the full conversation history including tool use/result exchanges
-      let fullConversation = [...conversationMessages];
+      let fullConversation = [...compactedMessages];
 
       while (response.stop_reason === "tool_use" || response.stop_reason === "pause_turn") {
         // Handle pause_turn: the API paused a long-running turn (e.g., web search)

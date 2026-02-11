@@ -11,7 +11,6 @@ import {
   NavList,
 } from "@primer/react";
 import {
-  HomeIcon,
   ProjectIcon,
   GearIcon,
   PlusIcon,
@@ -24,6 +23,7 @@ import {
   createSpace,
   createTask,
   updateTask,
+  updateTaskStatus,
   updateSpace,
 } from "./api";
 import type { Space, TaskWithSubTasks, NewSpace, NewTask } from "./types";
@@ -32,6 +32,7 @@ import Settings from "./components/Settings";
 import AgentsManager from "./components/AgentsManager";
 import SpaceHome from "./components/SpaceHome";
 import TodayPage from "./components/TodayPage";
+import UpdateNotification from "./components/UpdateNotification";
 
 function App() {
   const [spaces, setSpaces] = useState<Space[]>([]);
@@ -165,7 +166,12 @@ function App() {
     updates: Partial<TaskWithSubTasks>,
   ) {
     try {
-      const updatedTask = await updateTask(taskId, updates);
+      // Use the more specific updateTaskStatus for status-only changes
+      const isStatusOnly =
+        Object.keys(updates).length === 1 && updates.status !== undefined;
+      const updatedTask = isStatusOnly
+        ? await updateTaskStatus(taskId, updates.status!)
+        : await updateTask(taskId, updates);
 
       // Update the task in the local state
       setTasks((prev) =>
@@ -395,6 +401,8 @@ function App() {
           </div>
         </Dialog>
       )}
+
+      <UpdateNotification />
     </div>
   );
 }

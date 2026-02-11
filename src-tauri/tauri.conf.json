@@ -23,7 +23,15 @@
   },
   "plugins": {
     "sql": {
-      "preload": ["sqlite:orcascore.db"]
+      "preload": [
+        "sqlite:orcascore.db"
+      ]
+    },
+    "updater": {
+      "endpoints": [
+        "https://github.com/orcas-app/orcas-desktop/releases/latest/download/latest.json"
+      ],
+      "dialog": false
     }
   },
   "bundle": {
@@ -38,6 +46,7 @@
       "signingIdentity": null,
       "hardenedRuntime": true,
       "entitlements": "Entitlements.plist"
-    }
+    },
+    "createUpdaterArtifacts": "v1Compatible"
   }
 }
