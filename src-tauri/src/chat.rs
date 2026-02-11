@@ -44,7 +44,10 @@ pub async fn send_chat_message(
     }
 
     if let Some(t) = tools {
-        body["tools"] = serde_json::json!(t);
+        if !t.is_empty() {
+            println!("Including {} tools in request for model '{}'", t.len(), resolved_model);
+            body["tools"] = serde_json::json!(t);
+        }
     }
 
     // Make HTTP request

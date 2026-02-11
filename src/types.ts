@@ -112,6 +112,7 @@ export interface ModelInfo {
   id: string;            // Full snapshot ID: "claude-sonnet-4-20250514"
   display_name: string;  // Friendly name: "claude-sonnet-4"
   display_label: string; // Human label: "Claude Sonnet 4"
+  supports_tools: boolean; // Whether this model supports tool/function calling
 }
 
 // Calendar types for Today page

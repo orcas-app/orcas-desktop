@@ -177,6 +177,15 @@ async fn resolve_model_id(
     providers::resolve_model_name(app_handle, &friendly_name).await
 }
 
+// Tauri command to check if a model supports tool use
+#[tauri::command]
+async fn check_model_supports_tools(
+    app_handle: tauri::AppHandle,
+    model_name: String,
+) -> Result<bool, String> {
+    providers::check_model_supports_tools(app_handle, &model_name).await
+}
+
 // Calendar integration commands
 
 #[tauri::command]
@@ -435,6 +444,7 @@ pub fn run() {
             start_task_planning,
             get_available_models,
             resolve_model_id,
+            check_model_supports_tools,
             edit_locks::acquire_edit_lock,
             edit_locks::release_edit_lock,
             edit_locks::check_edit_lock,

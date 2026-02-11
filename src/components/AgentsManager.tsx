@@ -25,10 +25,10 @@ interface AgentsManagerProps {
 
 // Fallback models in case API fetch fails
 const FALLBACK_MODELS: ModelInfo[] = [
-  { id: "claude-sonnet-4-20250514", display_name: "claude-sonnet-4", display_label: "Claude Sonnet 4" },
-  { id: "claude-3-5-sonnet-20241022", display_name: "claude-3-5-sonnet", display_label: "Claude 3.5 Sonnet" },
-  { id: "claude-3-opus-20240229", display_name: "claude-3-opus", display_label: "Claude 3 Opus" },
-  { id: "claude-3-haiku-20240307", display_name: "claude-3-haiku", display_label: "Claude 3 Haiku" },
+  { id: "claude-sonnet-4-20250514", display_name: "claude-sonnet-4", display_label: "Claude Sonnet 4", supports_tools: true },
+  { id: "claude-3-5-sonnet-20241022", display_name: "claude-3-5-sonnet", display_label: "Claude 3.5 Sonnet", supports_tools: true },
+  { id: "claude-3-opus-20240229", display_name: "claude-3-opus", display_label: "Claude 3 Opus", supports_tools: true },
+  { id: "claude-3-haiku-20240307", display_name: "claude-3-haiku", display_label: "Claude 3 Haiku", supports_tools: true },
 ];
 
 // Human-readable labels for system roles
@@ -447,8 +447,31 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
                     ))}
                   </Select>
                   <FormControl.Caption>
-                    {isLoadingModels ? "Loading models..." : "The AI model that powers this agent"}
+                    {isLoadingModels
+                      ? "Loading models..."
+                      : (() => {
+                          const selectedModel = availableModels.find(
+                            (m) => m.display_name === editModel
+                          );
+                          if (selectedModel && !selectedModel.supports_tools) {
+                            return "This model does not support tool use. The agent will not be able to read or write documents.";
+                          }
+                          return "The AI model that powers this agent";
+                        })()}
                   </FormControl.Caption>
+                  {(() => {
+                    const selectedModel = availableModels.find(
+                      (m) => m.display_name === editModel
+                    );
+                    if (selectedModel && !selectedModel.supports_tools) {
+                      return (
+                        <Flash variant="warning" sx={{ mt: 2, fontSize: 0 }}>
+                          This model does not support tool calling. Agent features like reading/writing task notes will not work.
+                        </Flash>
+                      );
+                    }
+                    return null;
+                  })()}
                 </FormControl>
               </Box>
 
@@ -546,9 +569,21 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
                     </Select.Option>
                   ))}
                 </Select>
-                {isLoadingModels && (
+                {isLoadingModels ? (
                   <FormControl.Caption>Loading models...</FormControl.Caption>
-                )}
+                ) : (() => {
+                    const selectedModel = availableModels.find(
+                      (m) => m.display_name === newAgentModel
+                    );
+                    if (selectedModel && !selectedModel.supports_tools) {
+                      return (
+                        <FormControl.Caption>
+                          This model does not support tool calling. Agent features like reading/writing task notes will not work.
+                        </FormControl.Caption>
+                      );
+                    }
+                    return null;
+                  })()}
               </FormControl>
             </Box>
 

@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import type { Agent, ChatMessage } from "../types";
-import { recordTaskAgentSession, startMCPServer, stopMCPServer, getSetting, getAllAgents, getSpaceContext } from "../api";
+import { recordTaskAgentSession, startMCPServer, stopMCPServer, getSetting, getAllAgents, getSpaceContext, checkModelSupportsTools } from "../api";
 import { withRetry } from "../utils/retry";
 
 interface ChatInterfaceProps {
@@ -493,13 +493,21 @@ The space context is shared across all tasks in the space.`;
       const modelName = agent.model_name || "claude-sonnet-4-5";
       const maxTokens = getMaxTokensForModel(modelName);
 
+      // Check if the model supports tool use before passing tools
+      const modelToolSupport = mcpServerRunning ? await checkModelSupportsTools(modelName) : false;
+      const toolsToSend = modelToolSupport ? mcpTools : undefined;
+
+      if (mcpServerRunning && !modelToolSupport) {
+        console.warn(`Model '${modelName}' does not support tool use. Tools will not be sent.`);
+      }
+
       let responseText: string = await withRetry(
         () => invoke<string>("send_chat_message", {
           model: modelName,
           messages: conversationMessages,
           system: enhancedSystemMessage,
           maxTokens: maxTokens,
-          tools: mcpServerRunning ? mcpTools : undefined,
+          tools: toolsToSend,
           apiKey: apiKey || undefined,
         }),
         {
@@ -601,7 +609,7 @@ The space context is shared across all tasks in the space.`;
             messages: fullConversation,
             system: enhancedSystemMessage,
             maxTokens: maxTokens,
-            tools: mcpServerRunning ? mcpTools : undefined,
+            tools: toolsToSend,
             apiKey: apiKey || undefined,
           }),
           {
