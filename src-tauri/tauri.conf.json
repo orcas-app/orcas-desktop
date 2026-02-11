@@ -31,7 +31,8 @@
       "endpoints": [
         "https://github.com/orcas-app/orcas-desktop/releases/latest/download/latest.json"
       ],
-      "dialog": false
+      "dialog": false,
+      "pubkey": ""
     }
   },
   "bundle": {
