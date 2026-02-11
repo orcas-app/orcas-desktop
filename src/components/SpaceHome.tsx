@@ -38,6 +38,7 @@ function SpaceHome({
 }: SpaceHomeProps) {
   const [tasks, setTasks] = useState<TaskWithSubTasks[]>([]);
   const [contextContent, setContextContent] = useState("");
+  const [isContextLoading, setIsContextLoading] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
   const [titleError, setTitleError] = useState("");
@@ -51,8 +52,6 @@ function SpaceHome({
 
   useEffect(() => {
     if (selectedSpace) {
-      // Reset content immediately to avoid showing stale data from previous space
-      setContextContent("");
       loadTasks(selectedSpace.id);
       loadContext(selectedSpace.id);
     }
@@ -85,12 +84,15 @@ function SpaceHome({
   }
 
   async function loadContext(spaceId: number) {
+    setIsContextLoading(true);
     try {
       const context = await getSpaceContext(spaceId);
       setContextContent(context || "");
     } catch (error) {
       console.error("Failed to load space context:", error);
       setContextContent("");
+    } finally {
+      setIsContextLoading(false);
     }
   }
 
@@ -281,22 +283,28 @@ function SpaceHome({
                 overflow: "auto",
                 padding: "16px",
               }}>
-                <MDXEditor
-                  key={`space-context-${selectedSpace.id}`}
-                  markdown={contextContent}
-                  onChange={(newContent) => {
-                    setContextContent(newContent);
-                    saveContext(newContent);
-                  }}
-                  plugins={[
-                    headingsPlugin(),
-                    listsPlugin(),
-                    quotePlugin(),
-                    thematicBreakPlugin(),
-                    markdownShortcutPlugin(),
-                  ]}
-                  contentEditableClassName="mdx-editor-content"
-                />
+                {isContextLoading ? (
+                  <Text sx={{ fontSize: 1, color: "fg.muted", padding: "8px" }}>
+                    Loading context...
+                  </Text>
+                ) : (
+                  <MDXEditor
+                    key={selectedSpace.id}
+                    markdown={contextContent}
+                    onChange={(newContent) => {
+                      setContextContent(newContent);
+                      saveContext(newContent);
+                    }}
+                    plugins={[
+                      headingsPlugin(),
+                      listsPlugin(),
+                      quotePlugin(),
+                      thematicBreakPlugin(),
+                      markdownShortcutPlugin(),
+                    ]}
+                    contentEditableClassName="mdx-editor-content"
+                  />
+                )}
               </div>
             </div>
 
