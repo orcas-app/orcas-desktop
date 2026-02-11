@@ -390,6 +390,12 @@ pub fn run() {
             sql: include_str!("../migrations/020_rename_projects_to_spaces.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 21,
+            description: "add_web_search_to_agents",
+            sql: include_str!("../migrations/021_add_web_search_to_agents.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

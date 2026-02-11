@@ -495,10 +495,24 @@ The space context is shared across all tasks in the space.`;
 
       // Check if the model supports tool use before passing tools
       const modelToolSupport = mcpServerRunning ? await checkModelSupportsTools(modelName) : false;
-      const toolsToSend = modelToolSupport ? mcpTools : undefined;
+      let toolsToSend: any[] | undefined = modelToolSupport ? [...mcpTools] : undefined;
 
       if (mcpServerRunning && !modelToolSupport) {
         console.warn(`Model '${modelName}' does not support tool use. Tools will not be sent.`);
+      }
+
+      // Add web search tool if enabled for this agent
+      if (agent.web_search_enabled) {
+        const webSearchTool = {
+          type: "web_search_20250305",
+          name: "web_search",
+          max_uses: 5,
+        };
+        if (toolsToSend) {
+          toolsToSend.push(webSearchTool);
+        } else {
+          toolsToSend = [webSearchTool];
+        }
       }
 
       let responseText: string = await withRetry(
@@ -529,7 +543,51 @@ The space context is shared across all tasks in the space.`;
       // Track the full conversation history including tool use/result exchanges
       let fullConversation = [...conversationMessages];
 
-      while (response.stop_reason === "tool_use") {
+      while (response.stop_reason === "tool_use" || response.stop_reason === "pause_turn") {
+        // Handle pause_turn: the API paused a long-running turn (e.g., web search)
+        // Send the response content back to continue the turn
+        if (response.stop_reason === "pause_turn") {
+          const pauseText = response.content
+            .filter((block: any) => block.type === "text")
+            .map((block: any) => block.text)
+            .join("");
+          if (pauseText) {
+            accumulatedContent += pauseText;
+            setCurrentStreamingMessage((prev) => {
+              if (!prev) return null;
+              return { ...prev, content: accumulatedContent };
+            });
+          }
+
+          fullConversation.push({
+            role: "assistant" as const,
+            content: response.content,
+          });
+
+          responseText = await withRetry(
+            () => invoke<string>("send_chat_message", {
+              model: modelName,
+              messages: fullConversation,
+              system: enhancedSystemMessage,
+              maxTokens: maxTokens,
+              tools: toolsToSend,
+              apiKey: apiKey || undefined,
+            }),
+            {
+              maxRetries: 3,
+              baseDelay: 1000,
+              onRetry: (attempt, error) => {
+                console.log(`Retry attempt ${attempt} after error:`, error.message);
+              },
+            }
+          ) as string;
+
+          response = JSON.parse(responseText) as any;
+          totalInputTokens += response.usage?.input_tokens || 0;
+          totalOutputTokens += response.usage?.output_tokens || 0;
+          continue;
+        }
+
         // Extract all content blocks
         const textContent = response.content
           .filter((block: any) => block.type === "text")
@@ -635,6 +693,22 @@ The space context is shared across all tasks in the space.`;
         .join("");
 
       accumulatedContent += finalContent;
+
+      // Extract citations from text blocks (web search results)
+      const citations: { url: string; title: string }[] = [];
+      for (const block of response.content) {
+        if (block.type === "text" && block.citations) {
+          for (const cite of block.citations) {
+            if (cite.url && !citations.some((c) => c.url === cite.url)) {
+              citations.push({ url: cite.url, title: cite.title || cite.url });
+            }
+          }
+        }
+      }
+      if (citations.length > 0) {
+        accumulatedContent += "\n\n**Sources:**\n" +
+          citations.map((c) => `- [${c.title}](${c.url})`).join("\n");
+      }
 
       // Check for length limits
       if (accumulatedContent.length > MAX_RESPONSE_LENGTH) {
@@ -904,13 +978,12 @@ The space context is shared across all tasks in the space.`;
           <ActionMenu>
             <ActionMenu.Anchor>
               <Button
-                variant="invisible"
+                variant="default"
                 size="small"
                 trailingVisual={ChevronDownIcon}
                 style={{
                   padding: "2px 8px",
                   fontSize: "12px",
-                  color: "#57606a",
                   fontWeight: "normal"
                 }}
               >

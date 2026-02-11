@@ -12,6 +12,7 @@ import {
   Dialog,
   ButtonGroup,
   FormControl,
+  Checkbox,
   Select,
   Label,
 } from "@primer/react";
@@ -51,6 +52,7 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
   const [editName, setEditName] = useState("");
   const [editModel, setEditModel] = useState("");
   const [editPrompt, setEditPrompt] = useState("");
+  const [editWebSearch, setEditWebSearch] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
   // New agent dialog state
@@ -58,6 +60,7 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
   const [newAgentName, setNewAgentName] = useState("");
   const [newAgentModel, setNewAgentModel] = useState(FALLBACK_MODELS[0].display_name);
   const [newAgentPrompt, setNewAgentPrompt] = useState("");
+  const [newAgentWebSearch, setNewAgentWebSearch] = useState(false);
 
   // Delete confirmation dialog state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -93,6 +96,7 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
       setEditName(selectedAgent.name);
       setEditModel(selectedAgent.model_name);
       setEditPrompt(selectedAgent.agent_prompt);
+      setEditWebSearch(!!selectedAgent.web_search_enabled);
       setHasChanges(false);
     }
   }, [selectedAgent]);
@@ -104,9 +108,10 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
       const nameChanged = !isSystem && editName !== selectedAgent.name;
       const modelChanged = editModel !== selectedAgent.model_name;
       const promptChanged = editPrompt !== selectedAgent.agent_prompt;
-      setHasChanges(nameChanged || modelChanged || promptChanged);
+      const webSearchChanged = editWebSearch !== !!selectedAgent.web_search_enabled;
+      setHasChanges(nameChanged || modelChanged || promptChanged || webSearchChanged);
     }
-  }, [editName, editModel, editPrompt, selectedAgent]);
+  }, [editName, editModel, editPrompt, editWebSearch, selectedAgent]);
 
   const loadAgents = async () => {
     try {
@@ -148,6 +153,7 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
         name: isSystem ? selectedAgent.name : editName.trim(),
         model_name: editModel,
         agent_prompt: editPrompt.trim(),
+        web_search_enabled: editWebSearch,
       });
 
       // Update the correct list
@@ -183,6 +189,7 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
         newAgentName.trim(),
         newAgentModel,
         newAgentPrompt.trim() || "You are a helpful assistant.",
+        newAgentWebSearch,
       );
 
       setUserAgents((prev) => [...prev, createdAgent].sort((a, b) => a.name.localeCompare(b.name)));
@@ -191,6 +198,7 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
       setNewAgentName("");
       setNewAgentModel(availableModels[0]?.display_name || FALLBACK_MODELS[0].display_name);
       setNewAgentPrompt("");
+      setNewAgentWebSearch(false);
     } catch (err) {
       console.error("Failed to create agent:", err);
       setError("Failed to create agent. Please try again.");
@@ -475,6 +483,20 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
                 </FormControl>
               </Box>
 
+              <Box mb={3}>
+                <FormControl>
+                  <Checkbox
+                    checked={editWebSearch}
+                    onChange={(e) => setEditWebSearch(e.target.checked)}
+                    disabled={isSaving}
+                  />
+                  <FormControl.Label>Enable web search</FormControl.Label>
+                  <FormControl.Caption>
+                    Allow this agent to search the web for up-to-date information. Uses the Anthropic web search API.
+                  </FormControl.Caption>
+                </FormControl>
+              </Box>
+
               <Box mb={4}>
                 <FormControl>
                   <FormControl.Label>System Prompt</FormControl.Label>
@@ -533,6 +555,7 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
             setNewAgentName("");
             setNewAgentModel(availableModels[0]?.display_name || FALLBACK_MODELS[0].display_name);
             setNewAgentPrompt("");
+            setNewAgentWebSearch(false);
           }}
           sx={{
             backgroundColor: "canvas.default",
@@ -600,6 +623,16 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
               </FormControl>
             </Box>
 
+            <Box mb={3}>
+              <FormControl>
+                <Checkbox
+                  checked={newAgentWebSearch}
+                  onChange={(e) => setNewAgentWebSearch(e.target.checked)}
+                />
+                <FormControl.Label>Enable web search</FormControl.Label>
+              </FormControl>
+            </Box>
+
             <ButtonGroup>
               <Button
                 variant="primary"
@@ -614,6 +647,7 @@ function AgentsManager({ onBack: _onBack }: AgentsManagerProps) {
                   setNewAgentName("");
                   setNewAgentModel(availableModels[0]?.display_name || FALLBACK_MODELS[0].display_name);
                   setNewAgentPrompt("");
+                  setNewAgentWebSearch(false);
                 }}
               >
                 Cancel

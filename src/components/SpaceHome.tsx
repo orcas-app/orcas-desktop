@@ -278,9 +278,9 @@ function SpaceHome({
               </div>
 
               {/* Context editor */}
-              <div style={{
+              <div className="context-editor-pane" style={{
                 flex: 1,
-                overflow: "auto",
+                overflow: "hidden",
                 padding: "16px",
               }}>
                 {isContextLoading ? (

@@ -294,12 +294,13 @@ export async function createAgent(
   name: string,
   modelName: string,
   agentPrompt: string,
+  webSearchEnabled: boolean = false,
 ): Promise<Agent> {
   const database = await getDb();
 
   const result = await database.execute(
-    "INSERT INTO agents (name, model_name, agent_prompt) VALUES ($1, $2, $3)",
-    [name, modelName, agentPrompt],
+    "INSERT INTO agents (name, model_name, agent_prompt, web_search_enabled) VALUES ($1, $2, $3, $4)",
+    [name, modelName, agentPrompt, webSearchEnabled ? 1 : 0],
   );
 
   const createdAgent = await database.select<Agent[]>(
@@ -316,7 +317,7 @@ export async function createAgent(
 
 export async function updateAgent(
   id: number,
-  updates: Partial<{ name: string; model_name: string; agent_prompt: string }>,
+  updates: Partial<{ name: string; model_name: string; agent_prompt: string; web_search_enabled: boolean }>,
 ): Promise<Agent> {
   const database = await getDb();
 
@@ -336,6 +337,11 @@ export async function updateAgent(
   if (updates.agent_prompt !== undefined) {
     fields.push("agent_prompt = $" + (fields.length + 1));
     values.push(updates.agent_prompt);
+  }
+
+  if (updates.web_search_enabled !== undefined) {
+    fields.push("web_search_enabled = $" + (fields.length + 1));
+    values.push(updates.web_search_enabled ? 1 : 0);
   }
 
   if (fields.length === 0) {

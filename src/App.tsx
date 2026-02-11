@@ -245,14 +245,15 @@ function App() {
             </Header>
 
             <NavList.Item
-              onClick={() => handleNavigation("home")}
-              aria-current={currentView === "home" ? "page" : undefined}
-            >
-              <NavList.LeadingVisual>
-                <HomeIcon />
-              </NavList.LeadingVisual>
-              Home
-            </NavList.Item>
+                key="0"
+                onClick={() => handleNavigation("today")}
+                aria-current={currentView === "today" ? "page" : undefined}
+              >
+                <NavList.LeadingVisual>
+                  <StarIcon />
+                </NavList.LeadingVisual>
+                Today
+              </NavList.Item>
 
             <NavList.Item href="#" aria-current={undefined}>
               <NavList.LeadingVisual>
@@ -283,23 +284,14 @@ function App() {
 
             <NavList.Divider />
             <NavList.Item>
-              Work
+              Spaces
               <NavList.TrailingAction
                 label="New space"
                 icon={PlusIcon}
                 onClick={handleCreateSpace}
               />
             </NavList.Item>
-            <NavList.Item
-                key="0"
-                onClick={() => handleNavigation("today")}
-                aria-current={currentView === "today" ? "page" : undefined}
-              >
-                <NavList.LeadingVisual>
-                  <StarIcon />
-                </NavList.LeadingVisual>
-                Today
-              </NavList.Item>
+
 
             {spaces.map((space) => (
               <NavList.Item

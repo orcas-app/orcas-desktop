@@ -1,7 +1,7 @@
 # Fix Markdown Editor Toolbar Height
 
 ## Issue
-The markdown editor toolbar doesn't have sufficient height, making it look cramped or cut off.
+The markdown editor toolbar doesn't have sufficient height, making it look cramped or cut off when the text is long. This does not apply in the default state.
 
 ## Location
 The MDXEditor component is used in multiple places:

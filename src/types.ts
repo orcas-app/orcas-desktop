@@ -65,6 +65,7 @@ export interface Agent {
   model_name: string;
   agent_prompt: string;
   system_role?: string | null;
+  web_search_enabled: boolean;
   created_at: string;
   updated_at: string;
 }

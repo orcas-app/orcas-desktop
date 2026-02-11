@@ -139,6 +139,24 @@ h3 {
     background-color: #fafafa;
 }
 
+/* Space Context MDX Editor scroll */
+.context-editor-pane {
+    display: flex;
+    flex-direction: column;
+}
+
+.context-editor-pane .mdxeditor {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.context-editor-pane .mdxeditor [role="textbox"] {
+    flex: 1;
+    overflow: auto;
+}
+
 .document-loading {
     display: flex;
     align-items: center;
