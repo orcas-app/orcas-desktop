@@ -4,12 +4,29 @@ use std::collections::HashMap;
 use std::env;
 use url::Url;
 
+// Known model prefixes that support tool use
+const TOOL_CAPABLE_PREFIXES: &[&str] = &[
+    "claude-",          // All Claude models support tools
+    "gpt-4",            // GPT-4 variants support function calling
+    "gpt-3.5-turbo",    // GPT-3.5 Turbo supports function calling
+    "gemini-",          // Gemini models support function calling
+    "mistral-large",    // Mistral Large supports function calling
+    "mistral-medium",   // Mistral Medium supports function calling
+    "command-r",        // Cohere Command R supports tools
+];
+
+fn model_supports_tools(model_id: &str) -> bool {
+    let id_lower = model_id.to_lowercase();
+    TOOL_CAPABLE_PREFIXES.iter().any(|prefix| id_lower.starts_with(prefix))
+}
+
 // Model information returned from providers
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelInfo {
     pub id: String,            // Full snapshot ID: "claude-sonnet-4-20250514"
     pub display_name: String,  // Friendly name: "claude-sonnet-4"
     pub display_label: String, // Human label: "Claude Sonnet 4"
+    pub supports_tools: bool,  // Whether this model supports tool/function calling
 }
 
 // Derive friendly name by stripping date suffix
@@ -253,10 +270,14 @@ pub async fn fetch_models(
             parsed
                 .data
                 .into_iter()
-                .map(|m| ModelInfo {
-                    display_name: derive_friendly_name(&m.id),
-                    display_label: m.display_name,
-                    id: m.id,
+                .map(|m| {
+                    let supports_tools = model_supports_tools(&m.id);
+                    ModelInfo {
+                        display_name: derive_friendly_name(&m.id),
+                        display_label: m.display_name,
+                        supports_tools,
+                        id: m.id,
+                    }
                 })
                 .collect()
         }
@@ -282,9 +303,11 @@ pub async fn fetch_models(
                         })
                         .collect::<Vec<_>>()
                         .join(" ");
+                    let supports_tools = model_supports_tools(&m.id);
                     ModelInfo {
                         display_name: friendly,
                         display_label: label,
+                        supports_tools,
                         id: m.id,
                     }
                 })
@@ -294,6 +317,23 @@ pub async fn fetch_models(
 
     println!("Fetched {} models", models.len());
     Ok(models)
+}
+
+// Check if a model supports tool use by its friendly name
+pub async fn check_model_supports_tools(
+    app: tauri::AppHandle,
+    friendly_name: &str,
+) -> Result<bool, String> {
+    let models = fetch_models(app).await?;
+
+    for model in &models {
+        if model.display_name == friendly_name || model.id == friendly_name {
+            return Ok(model.supports_tools);
+        }
+    }
+
+    // If we can't find the model, use the heuristic on the name directly
+    Ok(model_supports_tools(friendly_name))
 }
 
 // Resolve a friendly model name to its full snapshot ID

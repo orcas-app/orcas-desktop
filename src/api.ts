@@ -537,6 +537,17 @@ export async function getAvailableModels(): Promise<ModelInfo[]> {
   }
 }
 
+// Check if a model supports tool use
+export async function checkModelSupportsTools(modelName: string): Promise<boolean> {
+  try {
+    return await invoke<boolean>("check_model_supports_tools", { modelName });
+  } catch (error) {
+    console.error("Failed to check model tool support:", error);
+    // Default to true to not block functionality
+    return true;
+  }
+}
+
 // Calendar operations for Today page
 export async function requestCalendarPermission(): Promise<PermissionStatus> {
   try {
