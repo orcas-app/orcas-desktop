@@ -51,6 +51,8 @@ function SpaceHome({
 
   useEffect(() => {
     if (selectedSpace) {
+      // Reset content immediately to avoid showing stale data from previous space
+      setContextContent("");
       loadTasks(selectedSpace.id);
       loadContext(selectedSpace.id);
     }
@@ -280,6 +282,7 @@ function SpaceHome({
                 padding: "16px",
               }}>
                 <MDXEditor
+                  key={`space-context-${selectedSpace.id}`}
                   markdown={contextContent}
                   onChange={(newContent) => {
                     setContextContent(newContent);
