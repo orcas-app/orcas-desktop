@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Text, Button, Checkbox, Flash } from '@primer/react';
+import { Heading, Text, Button, Checkbox, Flash } from '@primer/react';
 import { CalendarIcon } from '@primer/octicons-react';
 import { platform } from '@tauri-apps/plugin-os';
 import type { Calendar, PermissionStatus } from '../types';
@@ -102,39 +102,35 @@ export default function CalendarSettings() {
 
   if (loading) {
     return (
-      <div style={{ padding: '16px' }}>
-        <Text color="fg.muted">Loading calendar settings...</Text>
-      </div>
+      <Text sx={{ fontSize: 1, color: "fg.muted" }}>Loading calendar settings...</Text>
     );
   }
 
   if (error && !permissionStatus) {
     return (
-      <div style={{ padding: '16px' }}>
-        <Flash variant="danger">{error}</Flash>
-      </div>
+      <Flash variant="danger">{error}</Flash>
     );
   }
 
   return (
-    <div style={{ padding: '16px', maxWidth: '800px' }}>
-      <div style={{ marginBottom: '16px' }}>
-        <h2 style={{ fontSize: '20px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <CalendarIcon size={24} />
-          Calendar Integration
-        </h2>
-        <Text color="fg.muted">
+    <div>
+      <div style={{ marginBottom: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+          <CalendarIcon size={20} />
+          <Heading sx={{ fontSize: 2 }}>Calendar Integration</Heading>
+        </div>
+        <Text sx={{ fontSize: 1, color: "fg.muted", display: "block" }}>
           Connect your system calendars to see events on the Today page
         </Text>
       </div>
 
       {/* Permission Status */}
       {permissionStatus === 'notdetermined' && (
-        <div style={{ marginBottom: '16px' }}>
-          <Flash variant="warning" style={{ marginBottom: '12px' }}>
+        <div style={{ marginBottom: '12px' }}>
+          <Flash variant="warning" sx={{ mb: 2 }}>
             Calendar access not yet authorized
           </Flash>
-          <Text style={{ display: 'block', marginBottom: '12px' }}>
+          <Text sx={{ fontSize: 1, display: "block", mb: 2 }}>
             Orcas needs permission to access your calendars to show events on the Today page.
           </Text>
           <Button variant="primary" onClick={handleRequestPermission}>
@@ -144,8 +140,8 @@ export default function CalendarSettings() {
       )}
 
       {permissionStatus === 'denied' && (
-        <div style={{ marginBottom: '16px' }}>
-          <Flash variant="danger" style={{ marginBottom: '12px' }}>
+        <div style={{ marginBottom: '12px' }}>
+          <Flash variant="danger" sx={{ mb: 2 }}>
             Calendar access denied. Please enable calendar access in System Settings.
           </Flash>
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -160,8 +156,8 @@ export default function CalendarSettings() {
       )}
 
       {permissionStatus === 'restricted' && (
-        <div style={{ marginBottom: '16px' }}>
-          <Flash variant="warning" style={{ marginBottom: '12px' }}>
+        <div style={{ marginBottom: '12px' }}>
+          <Flash variant="warning" sx={{ mb: 2 }}>
             Calendar access is restricted by system policies.
           </Flash>
           <Button onClick={handleRecheckPermission} disabled={recheckLoading}>
@@ -173,10 +169,12 @@ export default function CalendarSettings() {
       {/* Calendar Selection */}
       {permissionStatus === 'authorized' && (
         <div>
-          <h3 style={{ fontSize: '16px', marginBottom: '12px' }}>Select Calendars</h3>
+          <Text sx={{ fontSize: 1, fontWeight: "semibold", display: "block", mb: 2 }}>
+            Select Calendars
+          </Text>
 
           {calendars.length === 0 ? (
-            <Text color="fg.muted">No calendars found</Text>
+            <Text sx={{ fontSize: 1, color: "fg.muted" }}>No calendars found</Text>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {calendars.map((calendar) => (
@@ -211,10 +209,10 @@ export default function CalendarSettings() {
                     style={{ flex: 1, cursor: 'pointer' }}
                     onClick={() => handleCalendarToggle(calendar.id)}
                   >
-                    <Text style={{ fontWeight: 600, display: 'block' }}>
+                    <Text sx={{ fontWeight: "semibold", display: "block" }}>
                       {calendar.title}
                     </Text>
-                    <Text color="fg.muted" style={{ fontSize: '12px' }}>
+                    <Text sx={{ fontSize: 0, color: "fg.muted" }}>
                       {calendar.source}
                     </Text>
                   </div>
@@ -223,14 +221,14 @@ export default function CalendarSettings() {
             </div>
           )}
 
-          <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Text color="fg.muted" style={{ fontSize: '12px' }}>
+          <div style={{ marginTop: '12px' }}>
+            <Text sx={{ fontSize: 0, color: "fg.muted" }}>
               {selectedCalendarIds.size} calendar{selectedCalendarIds.size !== 1 ? 's' : ''} selected
             </Text>
           </div>
 
           <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--borderColor-default)' }}>
-            <Text color="fg.muted" style={{ fontSize: '12px', display: 'block', marginBottom: '8px' }}>
+            <Text sx={{ fontSize: 0, color: "fg.muted", display: "block", mb: 2 }}>
               If calendar events aren't showing up, try rechecking the permission or resetting it in System Settings.
             </Text>
             <div style={{ display: 'flex', gap: '8px' }}>

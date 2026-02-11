@@ -16,17 +16,6 @@ interface SpaceHomeProps {
   shouldEditSpaceTitle?: boolean; // Trigger edit mode for new spaces
 }
 
-// Rough token estimate: ~4 chars per token for English text
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
-}
-
-function getTokenColor(tokens: number): string {
-  if (tokens < 1500) return '#2da44e'; // green
-  if (tokens <= 2000) return '#bf8700'; // yellow
-  return '#cf222e'; // red
-}
-
 function SpaceHome({
   selectedSpace,
   onTaskClick,
@@ -150,9 +139,6 @@ function SpaceHome({
     }
   };
 
-  const tokenCount = estimateTokens(contextContent);
-  const tokenColor = getTokenColor(tokenCount);
-
   return (
     <div style={{ flex: 1, overflow: "auto" }}>
       {selectedSpace && (
@@ -262,19 +248,8 @@ function SpaceHome({
                     margin: 0,
                   }}
                 >
-                  Space Context
+                  Overview
                 </Heading>
-                <div style={{
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  color: tokenColor,
-                  padding: '4px 10px',
-                  borderRadius: '12px',
-                  backgroundColor: `${tokenColor}15`,
-                  border: `1px solid ${tokenColor}40`,
-                }}>
-                  ~{tokenCount} tokens
-                </div>
               </div>
 
               {/* Context editor */}

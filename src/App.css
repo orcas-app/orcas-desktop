@@ -134,9 +134,13 @@ h3 {
 }
 
 /* MDX Editor toolbar styling */
-.document-pane .mdxeditor [class*="toolbar"] {
+.document-pane .mdxeditor [class*="toolbar"],
+.context-editor-pane .mdxeditor [class*="toolbar"] {
     border-bottom: 1px solid var(--border-color);
     background-color: #fafafa;
+    min-height: 40px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
 }
 
 /* Space Context MDX Editor scroll */

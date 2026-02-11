@@ -1,11 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  Box,
   Heading,
   Text,
   TextInput,
-  Button,
-  Flash,
   FormControl,
   Radio,
   RadioGroup,
@@ -18,26 +15,26 @@ function Settings() {
   const [selectedProvider, setSelectedProvider] = useState<Provider>('anthropic');
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
     loadSettings();
+    return () => {
+      Object.values(debounceTimers.current).forEach(clearTimeout);
+    };
   }, []);
 
   const loadSettings = async () => {
     try {
       setIsLoading(true);
 
-      // Load selected provider
       const provider = await getSetting("api_provider");
       if (provider && (provider === 'anthropic' || provider === 'litellm')) {
         setSelectedProvider(provider as Provider);
       }
 
-      // Load all settings for all providers
       const loadedSettings: Record<string, string> = {};
       for (const provider of PROVIDERS) {
         for (const field of provider.settingsFields) {
@@ -47,7 +44,7 @@ function Settings() {
               loadedSettings[field.key] = value;
             }
           } catch {
-            // Setting doesn't exist yet, skip
+            // Setting doesn't exist yet
           }
         }
       }
@@ -55,145 +52,110 @@ function Settings() {
       setSettings(loadedSettings);
     } catch (error) {
       console.error("Failed to load settings:", error);
-      setError("Failed to load settings");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const validateFields = (): boolean => {
-    const currentProvider = PROVIDERS.find(p => p.id === selectedProvider);
-    if (!currentProvider) return false;
+  const saveField = useCallback(async (key: string, value: string) => {
+    const field = PROVIDERS.flatMap(p => p.settingsFields).find(f => f.key === key);
+    if (!field) return;
 
-    const errors: Record<string, string> = {};
-
-    for (const field of currentProvider.settingsFields) {
-      const value = settings[field.key] || '';
-
-      // Required field check
-      if (field.required && !value.trim()) {
-        errors[field.key] = `${field.label} is required`;
-        continue;
-      }
-
-      // Custom validation
-      if (field.validate && value.trim()) {
-        const validationError = field.validate(value);
-        if (validationError) {
-          errors[field.key] = validationError;
-        }
-      }
+    if (field.required && !value.trim()) {
+      setFieldErrors(prev => ({ ...prev, [key]: `${field.label} is required` }));
+      return;
     }
 
-    setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const handleSave = async () => {
-    try {
-      setIsSaving(true);
-      setError(null);
-      setShowSuccess(false);
-      setFieldErrors({});
-
-      // Validate all fields
-      if (!validateFields()) {
-        setError("Please fix the errors below");
+    if (field.validate && value.trim()) {
+      const validationError = field.validate(value);
+      if (validationError) {
+        setFieldErrors(prev => ({ ...prev, [key]: validationError }));
         return;
       }
-
-      // Save provider selection
-      await setSetting("api_provider", selectedProvider);
-
-      // Save all settings for current provider
-      const currentProvider = PROVIDERS.find(p => p.id === selectedProvider);
-      if (currentProvider) {
-        for (const field of currentProvider.settingsFields) {
-          const value = settings[field.key];
-          if (value && value.trim()) {
-            await setSetting(field.key, value.trim());
-          }
-        }
-      }
-
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
-    } catch (error) {
-      console.error("Failed to save settings:", error);
-      setError("Failed to save settings. Please try again.");
-    } finally {
-      setIsSaving(false);
     }
-  };
+
+    setFieldErrors(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+
+    try {
+      setSaveStatus('saving');
+      if (value.trim()) {
+        await setSetting(key, value.trim());
+      }
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch {
+      setSaveStatus('error');
+    }
+  }, []);
 
   const updateSetting = (key: string, value: string) => {
-    setSettings(prev => ({
-      ...prev,
-      [key]: value
-    }));
+    setSettings(prev => ({ ...prev, [key]: value }));
 
-    // Clear field error when user types
-    if (fieldErrors[key]) {
-      setFieldErrors(prev => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
+    if (debounceTimers.current[key]) {
+      clearTimeout(debounceTimers.current[key]);
+    }
+
+    debounceTimers.current[key] = setTimeout(() => {
+      saveField(key, value);
+    }, 800);
+  };
+
+  const handleProviderChange = async (value: string) => {
+    const provider = value as Provider;
+    setSelectedProvider(provider);
+    setFieldErrors({});
+
+    try {
+      setSaveStatus('saving');
+      await setSetting("api_provider", provider);
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch {
+      setSaveStatus('error');
     }
   };
 
   const currentProvider = PROVIDERS.find(p => p.id === selectedProvider);
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        height: '100vh',
-        overflow: 'hidden',
-        width: '100%',
-        flexDirection: 'column',
-      }}
-    >
-
-      {/* Content */}
-      <Box p={4} flex={1} sx={{ overflowY: "auto" }}>
-        {showSuccess && (
-          <Flash variant="success" sx={{ mb: 3 }}>
-            Settings saved successfully!
-          </Flash>
-        )}
-
-        {error && (
-          <Flash variant="danger" sx={{ mb: 3 }}>
-            {error}
-          </Flash>
-        )}
-
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', width: '100%', flexDirection: 'column' }}>
+      <div style={{ padding: '24px', flex: 1, overflowY: 'auto' }}>
         {isLoading ? (
           <Text sx={{ fontSize: 1, color: "fg.muted" }}>Loading...</Text>
         ) : (
           <>
             {/* Provider Selection */}
-            <Box mb={4}>
-              <Heading sx={{ fontSize: 2, mb: 2 }}>API Provider</Heading>
-              <Text sx={{ fontSize: 1, color: "fg.muted", mb: 3, display: "block" }}>
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <Heading sx={{ fontSize: 2 }}>API Provider</Heading>
+                {saveStatus === 'saving' && (
+                  <Text sx={{ fontSize: 0, color: "fg.muted" }}>Saving...</Text>
+                )}
+                {saveStatus === 'saved' && (
+                  <Text sx={{ fontSize: 0, color: "success.fg" }}>Saved</Text>
+                )}
+                {saveStatus === 'error' && (
+                  <Text sx={{ fontSize: 0, color: "danger.fg" }}>Save failed</Text>
+                )}
+              </div>
+              <Text sx={{ fontSize: 1, color: "fg.muted", display: "block", marginBottom: '12px' }}>
                 Choose how you want to access models
               </Text>
 
               <RadioGroup
                 name="provider"
-                onChange={(value) => {
-                  setSelectedProvider(value as Provider);
-                  setFieldErrors({});
-                }}
+                onChange={(value) => handleProviderChange(value as string)}
               >
                 {PROVIDERS.map((provider) => (
-                  <Box key={provider.id} mb={3}>
+                  <div key={provider.id} style={{ marginBottom: '12px' }}>
                     <FormControl>
                       <Radio
                         value={provider.id}
                         checked={selectedProvider === provider.id}
-                        disabled={isSaving}
                       />
                       <FormControl.Label sx={{ fontWeight: 'semibold' }}>
                         {provider.name}
@@ -202,20 +164,20 @@ function Settings() {
                     <Text sx={{ fontSize: 0, color: "fg.muted", ml: 4, display: "block" }}>
                       {provider.description}
                     </Text>
-                  </Box>
+                  </div>
                 ))}
               </RadioGroup>
-            </Box>
+            </div>
 
             {/* Provider-Specific Settings */}
             {currentProvider && (
-              <Box mb={4}>
+              <div style={{ marginBottom: '24px' }}>
                 <Heading sx={{ fontSize: 2, mb: 2 }}>
                   {currentProvider.name} Configuration
                 </Heading>
 
                 {currentProvider.settingsFields.map((field) => (
-                  <Box key={field.key} mb={3}>
+                  <div key={field.key} style={{ marginBottom: '12px' }}>
                     <Text
                       sx={{
                         fontSize: 1,
@@ -238,7 +200,6 @@ function Settings() {
                       onChange={(e) => updateSetting(field.key, e.target.value)}
                       placeholder={field.placeholder}
                       sx={{ width: "100%", maxWidth: 500 }}
-                      disabled={isSaving}
                       validationStatus={fieldErrors[field.key] ? 'error' : undefined}
                     />
 
@@ -253,31 +214,24 @@ function Settings() {
                         {field.helpText}
                       </Text>
                     )}
-                  </Box>
+                  </div>
                 ))}
-
-                <Button
-                  variant="primary"
-                  onClick={handleSave}
-                  disabled={isSaving}
-                >
-                  {isSaving ? "Saving..." : "Save Settings"}
-                </Button>
-              </Box>
+              </div>
             )}
 
             {/* Calendar Settings Section */}
-            <Box
-              mb={4}
-              pt={4}
-              borderTop="1px solid"
-              borderColor="border.default"
+            <div
+              style={{
+                marginBottom: '24px',
+                paddingTop: '24px',
+                borderTop: '1px solid var(--borderColor-default)',
+              }}
             >
               <CalendarSettings />
-            </Box>
+            </div>
           </>
         )}
-      </Box>
+      </div>
     </div>
   );
 }
