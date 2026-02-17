@@ -378,7 +378,7 @@ function TaskDetail({ task, spaceName, onBack }: TaskDetailProps) {
                   linkPlugin(),
                   linkDialogPlugin(),
                 ]}
-                contentEditableClassName={`mdx-editor-content mdx-editor-fullheight ${
+                contentEditableClassName={`mdx-editor-content ${
                   editLock === 'agent' ? 'mdx-editor-readonly' : ''
                 }`}
               />
