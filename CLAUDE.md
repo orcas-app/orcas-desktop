@@ -1,76 +1,79 @@
 # Orcas Agent Manager - Guide for AI Assistants
 
-This document provides essential context for AI assistants (like Claude) working on the Orcas Agent Manager codebase.
-
 ## What is Orcas?
 
-Orcas is a desktop application for managing AI agent workflows. It enables users to:
-- Organize work in a hierarchical structure (Projects → Tasks → Subtasks)
-- Delegate tasks to AI agents (powered by Claude or other LLMs)
-- Collaborate with AI on shared documents with review workflows
-- Manage multiple specialized agents with custom prompts
+A macOS desktop app for managing AI agent workflows. Users organize work in Spaces > Tasks > Subtasks, delegate to AI agents, and collaborate on shared documents with review workflows.
 
 ## Technology Stack
 
-- **Frontend**: React 19 + TypeScript + Vite
+- **Frontend**: React 19 + TypeScript + Vite 7
 - **Backend**: Tauri 2 (Rust)
-- **Database**: SQLite
+- **Database**: SQLite (21 migrations in `src-tauri/src/lib.rs`)
 - **AI Integration**: Anthropic SDK, LiteLLM support
 - **UI Framework**: Primer React (GitHub's design system)
 - **Agent Tools**: Model Context Protocol (MCP)
+- **Platform Features**: macOS calendar integration (EventKit)
 
-IMPORTANT!! the Box element (<Box>) is deprecated. NEVER INTRODUCE IT IN NEW CODE
-
-## Key Documentation
-
-### User Flows and Architecture
-📊 **[User Flows Documentation](docs/USER_FLOWS.md)** - Comprehensive visual diagrams showing:
-- Application architecture overview
-- Task management workflows
-- AI agent planning and interaction flows
-- Document edit lock and review mechanisms
-- Agent and provider configuration flows
-- Data model and state management
-
-This is the best resource for understanding how the application works from a user's perspective.
-
-### Technical Documentation
-- [MCP Integration](docs/README_MCP.md) - Model Context Protocol setup and agent tools
-- [Chat Interface Review](docs/CHAT_INTERFACE_REVIEW.md) - Chat implementation details
-- [Development Todo](docs/todo.md) - Current development tasks and priorities
-
-### Project tasks / todos
-
-- Tasks / todos for the project are stored in the [todos](todos/) folder
-- The task file name starts with the task priority. P0 is highest priority, P1 is medium priority and P2 is lower priority
-- If the user asks to implement a particular todo, search the todos/ folder to find it
-- After completing a todo, move it to the todos/done subfolder
+IMPORTANT: The `<Box>` element is deprecated. NEVER INTRODUCE IT IN NEW CODE.
 
 ## Project Structure
 
 ```
-agent-manager/
-├── src/                    # Frontend React application
-│   ├── components/         # React components (TaskDetail, ChatInterface, etc.)
-│   ├── api.ts             # Tauri command wrappers
-│   └── App.tsx            # Main application component
-├── src-tauri/             # Tauri Rust backend
+orcas-desktop/
+├── src/                        # Frontend React application
+│   ├── App.tsx                 # Main app component, routing
+│   ├── api.ts                  # Tauri command wrappers
+│   ├── types.ts                # TypeScript interfaces
+│   ├── providers.ts            # Provider configuration
+│   ├── components/             # React components
+│   │   ├── ChatInterface.tsx   # AI chat with streaming + MCP tools
+│   │   ├── AgentsManager.tsx   # Agent CRUD
+│   │   ├── TaskDetail.tsx      # Task view with subtasks
+│   │   ├── PlanCard.tsx        # Task planning display
+│   │   ├── SpaceHome.tsx       # Space overview
+│   │   ├── AgendaView.tsx      # Calendar agenda
+│   │   ├── CalendarSettings.tsx
+│   │   ├── Settings.tsx        # App settings (API keys, provider)
+│   │   ├── TodayPage.tsx       # Today/agenda page
+│   │   ├── TodayTaskList.tsx
+│   │   ├── AgentSelector.tsx
+│   │   ├── EventPopover.tsx
+│   │   ├── StatusChip.tsx
+│   │   └── UpdateNotification.tsx
+│   ├── utils/                  # Utilities
+│   │   ├── retry.ts            # Exponential backoff
+│   │   ├── tokenEstimation.ts  # Token counting
+│   │   └── videoConferencing.ts
+│   └── mcp-servers/            # In-process MCP server
+│       ├── agent-notes-server.ts
+│       └── database-utils.ts
+├── src-tauri/                  # Tauri Rust backend
 │   └── src/
-│       ├── lib.rs         # Tauri commands and setup
-│       ├── chat.rs        # AI provider integration
-│       ├── planning_agent.rs  # Task planning logic
-│       ├── edit_locks.rs  # Document concurrency control
-│       ├── task_notes.rs  # Document persistence
-│       └── providers/     # AI provider implementations
-├── mcp-server/            # Model Context Protocol server (TypeScript)
-└── docs/                  # Documentation
+│       ├── main.rs             # Entry point
+│       ├── lib.rs              # Tauri commands, migrations, MCP lifecycle
+│       ├── chat.rs             # Chat message handling + provider routing
+│       ├── planning_agent.rs   # Autonomous task planning
+│       ├── edit_locks.rs       # Document concurrency control
+│       ├── task_notes.rs       # Task document persistence
+│       ├── database.rs         # Data model structs
+│       ├── settings.rs         # Settings CRUD (global DB pool)
+│       ├── space_context.rs    # Space-level context for AI
+│       ├── calendar.rs         # macOS EventKit integration
+│       └── providers/
+│           └── mod.rs          # Provider trait, Anthropic + LiteLLM configs
+├── mcp-agent-notes/            # MCP server package
+├── docs/                       # Documentation
+│   ├── USER_FLOWS.md           # Visual workflow diagrams (best overview)
+│   ├── README_MCP.md           # MCP setup and tools
+│   └── CHAT_INTERFACE_REVIEW.md
+└── .beads/                     # Issue tracking (bd command)
 ```
 
 ## Core Concepts
 
 ### Data Hierarchy
 ```
-Project (container)
+Space (container, formerly "Project")
   └─ Task (work unit requiring review)
       └─ Subtask (executable step, can be delegated to agents)
 ```
@@ -79,16 +82,19 @@ Project (container)
 `todo` → `in_progress` → `for_review` → `done`
 
 ### Document Collaboration
-- Tasks have a shared markdown document (task_notes)
-- Users and agents can edit the document
-- Edit locks prevent concurrent modifications
-- Users review and approve/reject agent changes via diff view
+- Tasks have shared markdown documents (`task_notes` table)
+- Edit locks prevent concurrent modifications (`agent_edit_locks` table)
+- Locks store original content for diff view
+- Users review and approve/reject agent changes
 
 ### Agent System
-- Agents are AI assistants with custom prompts and models
-- System agents (like Planning Agent) handle specific workflows
-- User-created agents can be specialized for different tasks
-- Agents interact via chat and can use MCP tools to read/write documents
+- Agents have custom prompts, model selection, and optional web search
+- System agents (Planning Agent with `system_role='planning'`) handle specific workflows
+- Agents interact via chat and use MCP tools to read/write documents
+- Agent-task associations tracked in `task_agent_sessions` table
+
+### Database Tables
+`spaces`, `tasks`, `subtasks`, `agents`, `task_agent_sessions`, `agent_notes`, `task_notes`, `settings`, `agent_edit_locks`
 
 ## Common Development Tasks
 
@@ -99,98 +105,61 @@ Project (container)
 
 ### Adding a New React Component
 1. Create component in `src/components/`
-2. Import in appropriate parent component or App.tsx
-3. Add routing if needed in App.tsx
+2. Import in appropriate parent component or `App.tsx`
 
 ### Database Schema Changes
-1. Add migration in `src-tauri/src/lib.rs` (migrations array)
+1. Add migration in `src-tauri/src/lib.rs` (migrations array, currently 21)
 2. Update relevant query functions
 3. Test migration path from previous version
 
 ### Adding MCP Tools
-1. Update `mcp-server/index.ts` with new tool definition
-2. Agents automatically get access to new tools
-3. Tools should be task-context aware (use task_id)
+1. Update `src/mcp-servers/agent-notes-server.ts` with new tool definition
+2. Tools are: `read_task_notes`, `write_task_notes`, `manage_subtasks`, `read_space_context`, `get_task_details`
 
 ## Development Workflow
 
-### Running the Application
 ```bash
-# Install dependencies
-npm install
-
-# Run in development mode
-npm run tauri dev
-
-# Build for production
-npm run tauri build
+npm install          # Install dependencies
+npm run tauri dev    # Development mode
+npm run tauri build  # Production build
 ```
 
-### Working with the Database
-- SQLite database location: `~/.local/share/com.orcas.dev/` (Linux)
+### Database
+- macOS location: `~/Library/Application Support/com.orcas.dev/`
 - Schema defined in `src-tauri/src/lib.rs` migrations
-- Direct DB access for debugging: `sqlite3 <path-to-db>`
+- Debug: `sqlite3 <path-to-db>`
 
-### Testing AI Features
-- Requires valid API key (Anthropic or LiteLLM)
-- Configure in Settings → Select Provider → Enter Credentials
-- MCP server starts automatically when needed
-
-## Important Architectural Patterns
+## Architectural Patterns
 
 ### Event-Driven UI Updates
-The application uses Tauri events for real-time updates:
 - `task-planning-progress` - Planning agent progress
 - `task-planning-complete` - Planning finished
 - `task-planning-cancelled` - Planning cancelled
 - `agent-edit-lock-changed` - Document lock state changed
-
-Components listen for these events and update UI accordingly.
+- `calendar-permission-changed` - Calendar access changed
 
 ### Provider Abstraction
-The `src-tauri/src/providers/` directory contains provider implementations:
-- `anthropic.rs` - Direct Anthropic API
-- `litellm.rs` - LiteLLM gateway
-- `mod.rs` - Provider trait and factory
-
-This allows easy addition of new AI providers.
+`src-tauri/src/providers/mod.rs` defines the `Provider` enum (Anthropic, LiteLLM) with:
+- Model listing and snapshot resolution (e.g., `claude-sonnet-4` → `claude-sonnet-4-20250514`)
+- Tool capability detection per model
+- Extensible trait-based design
 
 ### Concurrency Control
-Edit locks prevent race conditions:
-- Only one actor (user or agent) can edit at a time
-- Locks store original content for diff view
-- Stale locks automatically cleaned up (60s background task)
+- Only one actor (user or agent) can edit task notes at a time
+- Stale locks auto-cleaned (60s background task)
 - Review workflow ensures user approval of agent changes
 
 ## Common Pitfalls
 
 1. **Don't skip edit lock checks** - Always verify lock status before modifying task_notes
 2. **Handle async properly** - Planning agent runs in background, use events for updates
-3. **Validate provider config** - Check that API keys are set before making AI calls
+3. **Validate provider config** - Check API keys are set before AI calls
 4. **Clean up MCP server** - Stop server process on app exit
 5. **Preserve message history** - ChatInterface uses localStorage, don't clear without user action
 
-## Getting Help
+## Issue Tracking
 
-- Check the [User Flows documentation](docs/USER_FLOWS.md) for visual workflow diagrams
-- Review existing components for patterns and conventions
-- Database schema is in `src-tauri/src/lib.rs` migrations
-- MCP tools are defined in `mcp-server/index.ts`
-
-## Contributing Guidelines
-
-When making changes:
-1. Follow existing code style and patterns
-2. Update documentation if adding new features
-3. Test database migrations thoroughly
-4. Ensure edit locks work correctly for any document-modifying features
-5. Add event listeners for any new async operations
-6. Update this guide if adding new architectural patterns
-
-## Task Management Quick Reference
-
-This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
-
+Use `bd` (beads) for all issue tracking:
 
 ```bash
 bd ready              # Find available work
@@ -200,20 +169,16 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
-## Landing the Plane (Session Completion)
+## Session Completion
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+Work is NOT complete until `git push` succeeds.
 
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
+1. File issues for remaining work (`bd create`)
+2. Run quality gates if code changed
+3. Close finished issues (`bd close`)
+4. Push:
    ```bash
-   git pull --rebase
-   bd sync
-   git push
+   git pull --rebase && bd sync && git push
    git status  # MUST show "up to date with origin"
    ```
 5. **Clean up** - Clear stashes, prune remote branches
