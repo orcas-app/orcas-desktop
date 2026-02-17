@@ -14,10 +14,13 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Get today's date in YYYY-MM-DD format
+  // Get today's date in YYYY-MM-DD format (local timezone)
   const getTodayDate = (): string => {
     const today = new Date();
-    return today.toISOString().split('T')[0];
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   const loadTodayData = async () => {

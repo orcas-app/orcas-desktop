@@ -304,11 +304,11 @@ pub mod macos {
         // Get time interval since 1970
         let time_interval: f64 = msg_send![ns_date, timeIntervalSince1970];
 
-        // Convert to chrono DateTime
-        use chrono::{Utc, TimeZone};
-        let dt = Utc.timestamp_opt(time_interval as i64, (time_interval.fract() * 1_000_000_000.0) as u32)
+        // Convert to chrono DateTime in local timezone
+        use chrono::{Local, TimeZone};
+        let dt = Local.timestamp_opt(time_interval as i64, (time_interval.fract() * 1_000_000_000.0) as u32)
             .single()
-            .unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap());
+            .unwrap_or_else(|| Local.timestamp_opt(0, 0).unwrap());
 
         dt.to_rfc3339()
     }
