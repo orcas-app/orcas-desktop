@@ -33,5 +33,8 @@ fi
 bd version
 
 echo "Installing npm dependencies..."
-npm install --prefix "$CLAUDE_PROJECT_DIR"
+# CLAUDE_PROJECT_DIR may not be set in all environments; fall back to the
+# project root derived from this script's location (.claude/hooks/session-start.sh → ../../)
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+npm install --prefix "$PROJECT_DIR"
 echo "npm install complete"
