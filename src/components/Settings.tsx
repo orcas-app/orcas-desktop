@@ -6,8 +6,9 @@ import {
   FormControl,
   Radio,
   RadioGroup,
+  Button,
 } from "@primer/react";
-import { getSetting, setSetting } from "../api";
+import { getSetting, setSetting, testConnection } from "../api";
 import { PROVIDERS, Provider } from "../providers";
 import CalendarSettings from "./CalendarSettings";
 
@@ -17,6 +18,8 @@ function Settings() {
   const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [testMessage, setTestMessage] = useState<string>('');
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
@@ -108,6 +111,8 @@ function Settings() {
     const provider = value as Provider;
     setSelectedProvider(provider);
     setFieldErrors({});
+    setTestStatus('idle');
+    setTestMessage('');
 
     try {
       setSaveStatus('saving');
@@ -116,6 +121,19 @@ function Settings() {
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch {
       setSaveStatus('error');
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTestStatus('testing');
+    setTestMessage('');
+    try {
+      const msg = await testConnection();
+      setTestStatus('success');
+      setTestMessage(msg);
+    } catch (error) {
+      setTestStatus('error');
+      setTestMessage(typeof error === 'string' ? error : 'Connection failed');
     }
   };
 
@@ -218,6 +236,30 @@ function Settings() {
                 ))}
               </div>
             )}
+
+            {/* Test Connection */}
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <Button
+                  onClick={handleTestConnection}
+                  disabled={testStatus === 'testing'}
+                  variant="default"
+                  size="small"
+                >
+                  {testStatus === 'testing' ? 'Testing…' : 'Test Connection'}
+                </Button>
+                {testStatus === 'success' && (
+                  <Text sx={{ fontSize: 1, color: 'success.fg' }}>
+                    ✓ {testMessage}
+                  </Text>
+                )}
+                {testStatus === 'error' && (
+                  <Text sx={{ fontSize: 1, color: 'danger.fg' }}>
+                    ✗ {testMessage}
+                  </Text>
+                )}
+              </div>
+            </div>
 
             {/* Calendar Settings Section */}
             <div

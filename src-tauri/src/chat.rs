@@ -83,3 +83,42 @@ pub async fn send_chat_message(
 
     Ok(result)
 }
+
+#[tauri::command]
+pub async fn test_connection(app: tauri::AppHandle) -> Result<String, String> {
+    // Load and validate provider config (fails fast if credentials are missing)
+    let config = load_provider_config(app).await?;
+
+    let endpoint = config.get_models_endpoint();
+    let headers = config.get_headers();
+
+    let client = reqwest::Client::new();
+    let mut request = client.get(&endpoint);
+
+    for (key, value) in headers {
+        request = request.header(&key, &value);
+    }
+
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        // Surface a human-friendly message for common HTTP errors
+        let msg = match status.as_u16() {
+            401 => "Authentication failed. Check your API key.".to_string(),
+            403 => "Access denied. Your API key may lack the required permissions.".to_string(),
+            404 => "Endpoint not found. Check the base URL for your provider.".to_string(),
+            _ => format!("API returned an error (HTTP {}): {}", status, error_text),
+        };
+        return Err(msg);
+    }
+
+    Ok("Connection successful".to_string())
+}
