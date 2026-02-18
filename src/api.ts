@@ -533,6 +533,11 @@ export async function cancelTaskPlanning(taskId: number): Promise<string> {
   }
 }
 
+// Test connection to the configured provider
+export async function testConnection(): Promise<string> {
+  return await invoke<string>("test_connection");
+}
+
 // Model operations
 export async function getAvailableModels(): Promise<ModelInfo[]> {
   try {

@@ -468,7 +468,8 @@ pub fn run() {
             get_events_for_date,
             open_calendar_settings,
             get_tasks_scheduled_for_date,
-            get_recently_edited_tasks
+            get_recently_edited_tasks,
+            chat::test_connection
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
