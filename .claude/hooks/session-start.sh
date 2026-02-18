@@ -1,6 +1,11 @@
 #!/bin/bash
+set -euo pipefail
 
-# .claude/hooks/session-start.sh
+# Only run in remote (Claude Code on the web) environments
+if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
+  exit 0
+fi
+
 echo "Setting up bd (beads issue tracker)..."
 
 # Try npm first, fall back to binary download
@@ -19,5 +24,14 @@ if ! command -v bd &> /dev/null; then
     fi
 fi
 
+# Persist PATH so bd is available throughout the session
+if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+    echo "export PATH=\"${HOME}/.local/bin:\$PATH\"" >> "$CLAUDE_ENV_FILE"
+fi
+
 # Verify and show version
 bd version
+
+echo "Installing npm dependencies..."
+npm install --prefix "$CLAUDE_PROJECT_DIR"
+echo "npm install complete"
