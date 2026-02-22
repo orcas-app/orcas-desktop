@@ -8,10 +8,10 @@
 # Example: issue-prefix: "myproject" creates issues like "myproject-1", "myproject-2", etc.
 # issue-prefix: ""
 
-# Use no-db mode: load from JSONL, write back after each command
-# When true, bd will use .beads/issues.jsonl as the source of truth
-# instead of the Dolt database
-no-db: true
+# Backend: Using SQLite (via bd v0.50.3 which supports it without CGO).
+# bd v0.52.0+ removed SQLite/JSONL support and requires Dolt (needs CGO).
+# The Claude Code Web pre-built Linux binary lacks CGO, so we pin to v0.50.3.
+# See session-start.sh for the pinned binary download.
 
 # Enable JSON output by default
 # json: false
