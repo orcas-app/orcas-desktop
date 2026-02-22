@@ -17,6 +17,9 @@ last-touched
 # Local version tracking (prevents upgrade notification spam after git ops)
 .local_version
 
+# Migration hint timestamp (local runtime file, not shared)
+.migration-hint-ts
+
 # Legacy database files
 db.sqlite
 bd.db
