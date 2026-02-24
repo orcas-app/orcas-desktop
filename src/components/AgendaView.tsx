@@ -1,24 +1,20 @@
 import { useState } from 'react';
-import { Box, Text, Heading, Button, IconButton } from '@primer/react';
-import { CalendarIcon, SyncIcon, VideoIcon } from '@primer/octicons-react';
 import type { CalendarEvent, EventSpaceTagWithSpace, Space } from '../types';
 import EventPopover from './EventPopover';
-import { extractMeetingLink, removeVideoConferencingUrls, formatAttendees } from '../utils/videoConferencing';
+import { extractMeetingLink, formatAttendees } from '../utils/videoConferencing';
 
 interface AgendaViewProps {
   events: CalendarEvent[];
-  onRefresh: () => void;
   eventSpaceTags?: Record<string, EventSpaceTagWithSpace[]>;
   spaces?: Space[];
   onTagSpace?: (eventId: string, spaceId: number) => void;
   onUntagSpace?: (eventId: string, spaceId: number) => void;
 }
 
-export default function AgendaView({ events, onRefresh, eventSpaceTags, spaces, onTagSpace, onUntagSpace }: AgendaViewProps) {
+export default function AgendaView({ events, eventSpaceTags, spaces, onTagSpace, onUntagSpace }: AgendaViewProps) {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [popoverAnchor, setPopoverAnchor] = useState<HTMLElement | null>(null);
 
-  // Separate all-day and timed events
   const allDayEvents = events.filter(e => e.is_all_day);
   const timedEvents = events.filter(e => !e.is_all_day).sort((a, b) => {
     return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
@@ -30,7 +26,7 @@ export default function AgendaView({ events, onRefresh, eventSpaceTags, spaces, 
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-    });
+    }).toLowerCase();
   };
 
   const handleEventClick = (event: CalendarEvent, target: HTMLElement) => {
@@ -43,295 +39,143 @@ export default function AgendaView({ events, onRefresh, eventSpaceTags, spaces, 
     setPopoverAnchor(null);
   };
 
-  return (
-    <Box
-      sx={{
-        borderRight: '1px solid',
-        borderColor: 'border.default',
-        height: '100%',
-        overflowY: 'auto',
-        bg: 'canvas.default',
-      }}
-    >
-      <Box
-        sx={{
-          p: 2,
-          bg: 'canvas.default',
-          position: 'sticky',
-          top: 0,
-          zIndex: 1,
+  const renderEventCard = (event: CalendarEvent) => {
+    const meetingLink = extractMeetingLink(event);
+    const { displayText: attendeesText } = formatAttendees(event.attendees);
+
+    return (
+      <div
+        key={event.id}
+        onClick={(e) => handleEventClick(event, e.currentTarget)}
+        style={{
+          display: 'flex',
+          gap: '12px',
+          alignItems: 'flex-start',
+          padding: '12px',
+          border: '1px solid #bdbdbd',
+          borderRadius: '6px',
+          backgroundColor: 'white',
+          cursor: 'pointer',
+          minHeight: '60px',
         }}
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#828282'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#bdbdbd'; }}
       >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Heading sx={{ fontSize: 2, fontWeight: 'semibold', display: 'flex', alignItems: 'center', gap: 2 }}>
-            <CalendarIcon size={18} />
-            Today's Agenda
-          </Heading>
-          <Button size="small" onClick={onRefresh} leadingVisual={SyncIcon}></Button>
-        </Box>
-        <Text sx={{ fontSize: 1, color: 'fg.muted', mt: 1 }}>
-          {new Date().toLocaleDateString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          })}
-        </Text>
-      </Box>
-
-      <Box sx={{ p: 2 }}>
-        {events.length === 0 ? (
-          <Box
-            sx={{
-              textAlign: 'center',
-              py: 6,
-              color: 'fg.muted',
-            }}
-          >
-            <Box sx={{ mb: 2, opacity: 0.3 }}>
-              <CalendarIcon size={48} />
-            </Box>
-            <Text sx={{ display: 'block', fontSize: 2 }}>
-              No events scheduled for today
-            </Text>
-            <Text sx={{ display: 'block', fontSize: 1, mt: 2 }}>
-              Configure calendars in Settings to see your events
-            </Text>
-          </Box>
-        ) : (
-          <>
-            {/* All-day events section */}
-            {allDayEvents.length > 0 && (
-              <Box sx={{ mb: 3 }}>
-                <Text
-                  sx={{
-                    fontSize: 1,
-                    fontWeight: 'semibold',
-                    color: 'fg.muted',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    mb: 2,
-                    display: 'block',
-                  }}
-                >
-                  All Day
-                </Text>
-                {allDayEvents.map((event) => {
-                  const meetingLink = extractMeetingLink(event);
-                  const { displayText: attendeesText } = formatAttendees(event.attendees);
-
-                  return (
-                    <Box
-                      key={event.id}
-                      onClick={(e: React.MouseEvent<HTMLDivElement>) => handleEventClick(event, e.currentTarget)}
-                      sx={{
-                        p: '10px',
-                        mb: '10px',
-                        bg: 'canvas.default',
-                        borderRadius: 2,
-                        border: '1px solid',
-                        borderColor: 'border.default',
-                        cursor: 'pointer',
-                        position: 'relative',
-                        '&:hover': {
-                          bg: 'canvas.inset',
-                          borderColor: 'accent.emphasis',
-                        },
-                      }}
-                    >
-                      {/* Video icon in top right */}
-                      {meetingLink && (
-                        <Box
-                          sx={{
-                            position: 'absolute',
-                            top: '8px',
-                            right: '8px',
-                          }}
-                        >
-                          <IconButton
-                            icon={VideoIcon}
-                            size="small"
-                            variant="invisible"
-                            aria-label="Join video meeting"
-                            onClick={(e: React.MouseEvent) => {
-                              e.stopPropagation();
-                              window.open(meetingLink, '_blank');
-                            }}
-                            sx={{
-                              color: 'accent.fg',
-                              '&:hover': {
-                                bg: 'accent.subtle',
-                              },
-                            }}
-                          />
-                        </Box>
-                      )}
-
-                      <Box sx={{ display: 'flex', alignItems: 'start', gap: 2, pr: meetingLink ? 4 : 0 }}>
-                        <Box
-                          sx={{
-                            width: 3,
-                            height: 3,
-                            borderRadius: '50%',
-                            bg: 'accent.emphasis',
-                            flexShrink: 0,
-                            mt: '6px',
-                          }}
-                        />
-                        <Box sx={{ flex: 1 }}>
-                          <Text sx={{ fontWeight: 'semibold', display: 'block' }}>{event.title}</Text>
-                          {attendeesText && (
-                            <Text sx={{ fontSize: 1, color: 'fg.muted', mt: 1, display: 'block' }}>
-                              {attendeesText}
-                            </Text>
-                          )}
-                          {eventSpaceTags?.[event.id]?.length ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                              {eventSpaceTags[event.id].map((tag) => (
-                                <span
-                                  key={tag.space_id}
-                                  title={tag.space_title}
-                                  style={{
-                                    display: 'inline-block',
-                                    width: '8px',
-                                    height: '8px',
-                                    borderRadius: '50%',
-                                    backgroundColor: tag.space_color || '#6e7781',
-                                    flexShrink: 0,
-                                  }}
-                                />
-                              ))}
-                            </div>
-                          ) : null}
-                        </Box>
-                      </Box>
-                    </Box>
-                  );
-                })}
-              </Box>
-            )}
-
-            {/* Timed events section */}
-            {timedEvents.length > 0 && (
-              <Box>
-                <Text
-                  sx={{
-                    fontSize: 1,
-                    fontWeight: 'semibold',
-                    color: 'fg.muted',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    mb: 2,
-                    display: 'block',
-                  }}
-                >
-                  Schedule
-                </Text>
-                {timedEvents.map((event) => {
-                  const meetingLink = extractMeetingLink(event);
-                  const cleanLocation = event.location ? removeVideoConferencingUrls(event.location) : '';
-                  const { displayText: attendeesText } = formatAttendees(event.attendees);
-
-                  return (
-                    <Box
-                      key={event.id}
-                      onClick={(e: React.MouseEvent<HTMLDivElement>) => handleEventClick(event, e.currentTarget)}
-                      sx={{
-                        p: '10px',
-                        mb: '10px',
-                        bg: 'canvas.default',
-                        borderRadius: 2,
-                        border: '1px solid',
-                        borderColor: 'border.default',
-                        cursor: 'pointer',
-                        position: 'relative',
-                        '&:hover': {
-                          bg: 'canvas.inset',
-                          borderColor: 'accent.emphasis',
-                        },
-                      }}
-                    >
-                      {/* Video icon in top right */}
-                      {meetingLink && (
-                        <Box
-                          sx={{
-                            position: 'absolute',
-                            top: '8px',
-                            right: '8px',
-                          }}
-                        >
-                          <IconButton
-                            icon={VideoIcon}
-                            size="small"
-                            variant="invisible"
-                            aria-label="Join video meeting"
-                            onClick={(e: React.MouseEvent) => {
-                              e.stopPropagation();
-                              window.open(meetingLink, '_blank');
-                            }}
-                            sx={{
-                              color: 'accent.fg',
-                              '&:hover': {
-                                bg: 'accent.subtle',
-                              },
-                            }}
-                          />
-                        </Box>
-                      )}
-
-                      <Box sx={{ display: 'flex', gap: 2 }}>
-                        <Text
-                          sx={{
-                            fontSize: 1,
-                            color: 'fg.muted',
-                            minWidth: '70px',
-                            flexShrink: 0,
-                          }}
-                        >
-                          {formatTime(event.start_date)}
-                        </Text>
-                        <Box sx={{ flex: 1, pr: meetingLink ? 4 : 0 }}>
-                          <Text sx={{ fontWeight: 'semibold', display: 'block' }}>
-                            {event.title}
-                          </Text>
-                          {cleanLocation && (
-                            <Text sx={{ fontSize: 1, color: 'fg.muted', mt: 1, display: 'block' }}>
-                              {cleanLocation}
-                            </Text>
-                          )}
-                          {attendeesText && (
-                            <Text sx={{ fontSize: 1, color: 'fg.muted', mt: 1, display: 'block' }}>
-                              {attendeesText}
-                            </Text>
-                          )}
-                          {eventSpaceTags?.[event.id]?.length ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                              {eventSpaceTags[event.id].map((tag) => (
-                                <span
-                                  key={tag.space_id}
-                                  title={tag.space_title}
-                                  style={{
-                                    display: 'inline-block',
-                                    width: '8px',
-                                    height: '8px',
-                                    borderRadius: '50%',
-                                    backgroundColor: tag.space_color || '#6e7781',
-                                    flexShrink: 0,
-                                  }}
-                                />
-                              ))}
-                            </div>
-                          ) : null}
-                        </Box>
-                      </Box>
-                    </Box>
-                  );
-                })}
-              </Box>
-            )}
-          </>
+        {/* Time */}
+        {!event.is_all_day && (
+          <div style={{
+            width: '64px',
+            flexShrink: 0,
+            fontSize: '16px',
+            lineHeight: '18px',
+            color: '#828282',
+          }}>
+            {formatTime(event.start_date)}
+          </div>
         )}
-      </Box>
+        {event.is_all_day && (
+          <div style={{
+            width: '64px',
+            flexShrink: 0,
+            fontSize: '16px',
+            lineHeight: '18px',
+            color: '#828282',
+          }}>
+            All day
+          </div>
+        )}
+
+        {/* Event Details */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontSize: '16px',
+            lineHeight: '18px',
+            color: '#4f4f4f',
+          }}>
+            {event.title}
+          </div>
+          {attendeesText && (
+            <div style={{
+              fontSize: '14px',
+              lineHeight: '18px',
+              color: '#828282',
+              marginTop: '4px',
+            }}>
+              {attendeesText}
+            </div>
+          )}
+          {eventSpaceTags?.[event.id]?.length ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+              {eventSpaceTags[event.id].map((tag) => (
+                <span
+                  key={tag.space_id}
+                  title={tag.space_title}
+                  style={{
+                    display: 'inline-block',
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    backgroundColor: tag.space_color || '#6e7781',
+                    flexShrink: 0,
+                  }}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Video Button */}
+        {meetingLink && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              window.open(meetingLink, '_blank');
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 0,
+              flexShrink: 0,
+              color: '#828282',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '20px',
+              height: '20px',
+            }}
+            aria-label="Join video meeting"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  if (events.length === 0) {
+    return (
+      <div style={{
+        textAlign: 'center',
+        padding: '48px 0',
+        color: '#828282',
+      }}>
+        <div style={{ marginBottom: '8px', fontSize: '16px' }}>
+          No events scheduled for today
+        </div>
+        <div style={{ fontSize: '14px' }}>
+          Configure calendars in Settings to see your events
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {allDayEvents.map(renderEventCard)}
+      {timedEvents.map(renderEventCard)}
 
       {selectedEvent && popoverAnchor && (
         <EventPopover
@@ -344,6 +188,6 @@ export default function AgendaView({ events, onRefresh, eventSpaceTags, spaces, 
           onUntagSpace={onUntagSpace ? (spaceId) => onUntagSpace(selectedEvent.id, spaceId) : undefined}
         />
       )}
-    </Box>
+    </div>
   );
 }

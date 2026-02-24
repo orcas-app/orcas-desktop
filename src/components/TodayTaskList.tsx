@@ -1,276 +1,254 @@
 import { useState } from 'react';
-import { Box, Text, Heading, Button } from '@primer/react';
-import { ChecklistIcon, SyncIcon, CalendarIcon } from '@primer/octicons-react';
-import type { Task } from '../types';
-import { updateTaskScheduledDate } from '../api';
-import StatusChip from './StatusChip';
+import type { Task, Space } from '../types';
+import { updateTaskStatus, createTask } from '../api';
 
 interface TodayTaskListProps {
   tasks: Task[];
+  spaces: Space[];
   onRefresh: () => void;
   onTaskClick?: (taskId: number) => void;
 }
 
-export default function TodayTaskList({ tasks, onRefresh, onTaskClick }: TodayTaskListProps) {
-  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
+export default function TodayTaskList({ tasks, spaces, onRefresh, onTaskClick }: TodayTaskListProps) {
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [isAddingTask, setIsAddingTask] = useState(false);
 
-  const getTodayDate = (): string => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
+  // Group tasks by space
+  const spaceMap = new Map<number, Space>();
+  for (const space of spaces) {
+    spaceMap.set(space.id, space);
+  }
 
-  const today = getTodayDate();
+  const tasksBySpace = new Map<number, Task[]>();
+  for (const task of tasks) {
+    const existing = tasksBySpace.get(task.space_id) || [];
+    existing.push(task);
+    tasksBySpace.set(task.space_id, existing);
+  }
 
-  // Separate scheduled and recently edited tasks
-  const scheduledTasks = tasks.filter(t => t.scheduled_date === today);
-  const recentTasks = tasks.filter(t => t.scheduled_date !== today);
-
-  const handleTaskClick = (taskId: number) => {
-    if (onTaskClick) {
-      onTaskClick(taskId);
-    }
-  };
-
-  const handleDateClick = (e: React.MouseEvent, taskId: number) => {
+  const handleToggleTask = async (e: React.MouseEvent, task: Task) => {
     e.stopPropagation();
-    setEditingTaskId(taskId);
-  };
-
-  const handleDateChange = async (taskId: number, newDate: string | null) => {
+    const newStatus = task.status === 'done' ? 'todo' : 'done';
     try {
-      await updateTaskScheduledDate(taskId, newDate);
-      setEditingTaskId(null);
+      await updateTaskStatus(task.id, newStatus);
       onRefresh();
-    } catch (error) {
-      console.error('Failed to update scheduled date:', error);
+    } catch (err) {
+      console.error('Failed to toggle task:', err);
     }
   };
 
-  const formatRelativeTime = (dateString: string): string => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffHours / 24);
+  const handleAddTask = async () => {
+    if (!newTaskTitle.trim()) return;
+    // Use the first space if available, otherwise we can't create
+    const targetSpaceId = spaces.length > 0 ? spaces[0].id : null;
+    if (!targetSpaceId) return;
 
-    if (diffHours < 1) {
-      const diffMinutes = Math.floor(diffMs / (1000 * 60));
-      return diffMinutes <= 1 ? 'just now' : `${diffMinutes} minutes ago`;
-    } else if (diffHours < 24) {
-      return diffHours === 1 ? '1 hour ago' : `${diffHours} hours ago`;
-    } else if (diffDays === 1) {
-      return 'yesterday';
-    } else if (diffDays < 7) {
-      return `${diffDays} days ago`;
-    } else {
-      return date.toLocaleDateString();
+    try {
+      await createTask({
+        space_id: targetSpaceId,
+        title: newTaskTitle.trim(),
+        status: 'todo',
+        priority: 'medium',
+      });
+      setNewTaskTitle('');
+      setIsAddingTask(false);
+      onRefresh();
+    } catch (err) {
+      console.error('Failed to create task:', err);
     }
   };
 
-  const renderTask = (task: Task, showScheduledDate: boolean = false) => {
-    const isEditing = editingTaskId === task.id;
-
-    return (
-      <Box
-        key={task.id}
-        onClick={() => !isEditing && handleTaskClick(task.id)}
-        sx={{
-          p: '12px',
-          mb: '10px',
-          bg: 'canvas.default',
-          borderRadius: 2,
-          border: '1px solid',
-          borderColor: 'border.default',
-          cursor: isEditing ? 'default' : 'pointer',
-          '&:hover': isEditing ? {} : {
-            bg: 'canvas.subtle',
-            borderColor: 'accent.emphasis',
-          },
-        }}
-      >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 2 }}>
-          <Text sx={{ fontWeight: 'semibold', fontSize: 2, flex: 1 }}>
-            {task.title}
-          </Text>
-          <StatusChip variant={task.status}>{task.status.replace('_', ' ')}</StatusChip>
-        </Box>
-
-        {task.description && (
-          <Text
-            sx={{
-              fontSize: 1,
-              color: 'fg.muted',
-              mb: 2,
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-            }}
-          >
-            {task.description}
-          </Text>
-        )}
-
-        <Box sx={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-          {/* Scheduled Date */}
-          {isEditing ? (
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-              <input
-                type="date"
-                value={task.scheduled_date || ''}
-                onChange={(e) => handleDateChange(task.id, e.target.value || null)}
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  padding: '4px 8px',
-                  borderRadius: '6px',
-                  border: '1px solid #d0d7de',
-                  fontSize: '14px',
-                }}
-              />
-              <Button
-                size="small"
-                variant="invisible"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditingTaskId(null);
-                }}
-              >
-                Cancel
-              </Button>
-            </Box>
-          ) : (
-            <Box
-              onClick={(e: React.MouseEvent<HTMLDivElement>) => handleDateClick(e, task.id)}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                fontSize: 1,
-                color: task.scheduled_date === today ? 'accent.fg' : 'fg.muted',
-                cursor: 'pointer',
-                '&:hover': {
-                  color: 'accent.emphasis',
-                },
-              }}
-            >
-              <CalendarIcon size={14} />
-              <Text>
-                {task.scheduled_date
-                  ? task.scheduled_date === today
-                    ? 'Today'
-                    : new Date(task.scheduled_date).toLocaleDateString()
-                  : 'Schedule'}
-              </Text>
-            </Box>
-          )}
-
-          {/* Last edited time for recent tasks */}
-          {!showScheduledDate && task.updated_at && (
-            <Text sx={{ fontSize: 1, color: 'fg.muted' }}>
-              Edited {formatRelativeTime(task.updated_at)}
-            </Text>
-          )}
-        </Box>
-      </Box>
-    );
+  const handleNewTaskKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleAddTask();
+    } else if (e.key === 'Escape') {
+      setNewTaskTitle('');
+      setIsAddingTask(false);
+    }
   };
 
   return (
-    <Box
-      sx={{
-        height: '100%',
-        overflowY: 'auto',
-        bg: 'canvas.default',
-      }}
-    >
-      <Box
-        sx={{
-          p: 2,
-          borderBottom: '1px solid',
-          borderColor: 'border.default',
-          position: 'sticky',
-          top: 0,
-          bg: 'canvas.default',
-          zIndex: 1,
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      {/* Add New Task Row */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          height: '32px',
+          padding: '4px 12px',
+          borderRadius: '6px',
+          cursor: 'pointer',
+        }}
+        onClick={() => {
+          if (!isAddingTask) setIsAddingTask(true);
         }}
       >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Heading sx={{ fontSize: 2, fontWeight: 'semibold', display: 'flex', alignItems: 'center', gap: 2 }}>
-            <ChecklistIcon size={18} />
-            Tasks
-          </Heading>
-          <Button size="small" onClick={onRefresh} leadingVisual={SyncIcon}>
-            Refresh
-          </Button>
-        </Box>
-      </Box>
-
-      <Box sx={{ p: 2 }}>
-        {tasks.length === 0 ? (
-          <Box
-            sx={{
-              textAlign: 'center',
-              py: 6,
-              color: 'fg.muted',
+        {/* Plus icon */}
+        <div style={{
+          width: '16px',
+          height: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 1V13M1 7H13" stroke="#828282" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </div>
+        {isAddingTask ? (
+          <input
+            autoFocus
+            value={newTaskTitle}
+            onChange={(e) => setNewTaskTitle(e.target.value)}
+            onKeyDown={handleNewTaskKeyDown}
+            onBlur={() => {
+              if (!newTaskTitle.trim()) {
+                setIsAddingTask(false);
+              } else {
+                handleAddTask();
+              }
             }}
-          >
-            <Box sx={{ mb: 2, opacity: 0.3 }}>
-              <ChecklistIcon size={48} />
-            </Box>
-            <Text sx={{ display: 'block', fontSize: 2 }}>
-              No tasks for today
-            </Text>
-            <Text sx={{ display: 'block', fontSize: 1, mt: 2 }}>
-              Schedule a task or start working on something!
-            </Text>
-          </Box>
+            placeholder="Task title..."
+            style={{
+              flex: 1,
+              border: 'none',
+              outline: 'none',
+              fontSize: '16px',
+              fontFamily: 'Inter, sans-serif',
+              color: '#333',
+              backgroundColor: 'transparent',
+            }}
+          />
         ) : (
-          <>
-            {/* Scheduled Tasks */}
-            {scheduledTasks.length > 0 && (
-              <Box sx={{ mb: 3 }}>
-                <Text
-                  sx={{
-                    fontSize: 1,
-                    fontWeight: 'semibold',
-                    color: 'fg.muted',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    mb: 2,
-                    display: 'block',
-                  }}
-                >
-                  Scheduled for Today
-                </Text>
-                {scheduledTasks.map(task => renderTask(task, true))}
-              </Box>
-            )}
-
-            {/* Recently Edited Tasks */}
-            {recentTasks.length > 0 && (
-              <Box>
-                <Text
-                  sx={{
-                    fontSize: 1,
-                    fontWeight: 'semibold',
-                    color: 'fg.muted',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    mb: 2,
-                    display: 'block',
-                  }}
-                >
-                  Recently Edited
-                </Text>
-                {recentTasks.map(task => renderTask(task, false))}
-              </Box>
-            )}
-          </>
+          <span style={{
+            flex: 1,
+            fontSize: '16px',
+            color: '#828282',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+            Add a new task
+          </span>
         )}
-      </Box>
-    </Box>
+      </div>
+
+      {/* Tasks Grouped by Space */}
+      {Array.from(tasksBySpace.entries()).map(([spaceId, spaceTasks]) => {
+        const space = spaceMap.get(spaceId);
+        const spaceName = space?.title || 'Unknown Space';
+
+        return (
+          <div key={spaceId} style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+            padding: '4px 0',
+          }}>
+            {/* Space Header */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '2px',
+              height: '32px',
+              justifyContent: 'center',
+              padding: '2px 0',
+            }}>
+              <div style={{ padding: '4px 12px' }}>
+                <span style={{
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  color: '#333',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {spaceName}
+                </span>
+              </div>
+              <div style={{
+                height: '1px',
+                backgroundColor: space?.color || '#bdbdbd',
+                width: '100%',
+              }} />
+            </div>
+
+            {/* Tasks */}
+            {spaceTasks.map(task => (
+              <div
+                key={task.id}
+                onClick={() => onTaskClick?.(task.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  height: '32px',
+                  padding: '4px 12px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  backgroundColor: 'white',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#f2f2f2'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'white'; }}
+              >
+                {/* Checkbox */}
+                <button
+                  onClick={(e) => handleToggleTask(e, task)}
+                  style={{
+                    width: '16px',
+                    height: '16px',
+                    borderRadius: '4px',
+                    border: task.status === 'done' ? '1px solid #333' : '1px solid #bdbdbd',
+                    backgroundColor: task.status === 'done' ? '#333' : 'transparent',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 0,
+                  }}
+                >
+                  {task.status === 'done' && (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path d="M2 5L4 7L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </button>
+                <span style={{
+                  flex: 1,
+                  fontSize: '16px',
+                  color: task.status === 'done' ? '#828282' : '#333',
+                  textDecoration: task.status === 'done' ? 'line-through' : 'none',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  minWidth: 0,
+                }}>
+                  {task.title}
+                </span>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+
+      {/* Empty state */}
+      {tasks.length === 0 && (
+        <div style={{
+          textAlign: 'center',
+          padding: '48px 0',
+          color: '#828282',
+        }}>
+          <div style={{ marginBottom: '8px', fontSize: '16px' }}>
+            No tasks for today
+          </div>
+          <div style={{ fontSize: '14px' }}>
+            Schedule a task or start working on something!
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
