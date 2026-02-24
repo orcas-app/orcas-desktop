@@ -173,6 +173,7 @@ export default function TodayPage({ onTaskClick, onStartChat }: TodayPageProps) 
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
+        width: '100%',
         height: '100%',
         fontSize: '14px',
         color: '#828282',
@@ -188,6 +189,7 @@ export default function TodayPage({ onTaskClick, onStartChat }: TodayPageProps) 
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
+        width: '100%',
         height: '100%',
         fontSize: '14px',
         color: '#EB5757',
@@ -201,6 +203,7 @@ export default function TodayPage({ onTaskClick, onStartChat }: TodayPageProps) 
     <div style={{
       display: 'flex',
       flexDirection: 'column',
+      width: '100%',
       height: '100%',
       overflow: 'hidden',
       padding: '32px',
