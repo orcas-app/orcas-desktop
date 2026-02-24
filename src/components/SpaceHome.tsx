@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Heading, Button, Text, TextInput } from "@primer/react";
-import { getTasksBySpace, getSpaceContext, updateSpaceContext } from "../api";
-import type { Space, TaskWithSubTasks } from "../types";
-import StatusChip from "./StatusChip";
+import { getTasksBySpace, getSpaceContext, updateSpaceContext, createTask, getSpaceEvents, getEventsForDate, getSetting, untagEventFromSpace } from "../api";
+import type { Space, TaskWithSubTasks, CalendarEvent, EventSpaceAssociation } from "../types";
 import { MDXEditor, headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin, markdownShortcutPlugin } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
 
@@ -11,16 +10,18 @@ interface SpaceHomeProps {
   onTaskClick: (taskId: number) => void;
   onShowNewTaskDialog: () => void;
   onShowNewSpaceDialog: () => void;
-  refreshTrigger?: number; // Add optional prop to trigger refresh
+  onTaskCreated?: (task: TaskWithSubTasks) => void;
+  refreshTrigger?: number;
   onUpdateSpaceTitle: (spaceId: number, newTitle: string) => Promise<void>;
-  shouldEditSpaceTitle?: boolean; // Trigger edit mode for new spaces
+  shouldEditSpaceTitle?: boolean;
 }
 
 function SpaceHome({
   selectedSpace,
   onTaskClick,
-  onShowNewTaskDialog,
+  onShowNewTaskDialog: _onShowNewTaskDialog,
   onShowNewSpaceDialog,
+  onTaskCreated,
   refreshTrigger,
   onUpdateSpaceTitle,
   shouldEditSpaceTitle = false,
@@ -33,7 +34,14 @@ function SpaceHome({
   const [titleError, setTitleError] = useState("");
   const titleInputRef = useRef<HTMLInputElement>(null);
 
-  // Show non-done tasks first, then done tasks at the end
+  const [upcomingEvents, setUpcomingEvents] = useState<{ association: EventSpaceAssociation; calendarEvent?: CalendarEvent }[]>([]);
+
+  const [isAddingTask, setIsAddingTask] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const newTaskInputRef = useRef<HTMLInputElement>(null);
+  // Prevents onBlur from double-firing a creation when Enter/Escape already handled it
+  const newTaskSubmittingRef = useRef(false);
+
   const sortedTasks = [
     ...tasks.filter((task) => task.status !== "done"),
     ...tasks.filter((task) => task.status === "done"),
@@ -43,10 +51,10 @@ function SpaceHome({
     if (selectedSpace) {
       loadTasks(selectedSpace.id);
       loadContext(selectedSpace.id);
+      loadUpcomingEvents(selectedSpace.id);
     }
-  }, [selectedSpace, refreshTrigger]); // Re-run when refreshTrigger changes
+  }, [selectedSpace, refreshTrigger]);
 
-  // Enter edit mode for new spaces
   useEffect(() => {
     if (shouldEditSpaceTitle && selectedSpace) {
       setIsEditingTitle(true);
@@ -55,7 +63,6 @@ function SpaceHome({
     }
   }, [shouldEditSpaceTitle, selectedSpace]);
 
-  // Focus the input when entering edit mode
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
       titleInputRef.current.focus();
@@ -85,6 +92,63 @@ function SpaceHome({
     }
   }
 
+  async function loadUpcomingEvents(spaceId: number) {
+    try {
+      const today = new Date();
+      const endDate = new Date(today);
+      endDate.setDate(endDate.getDate() + 7);
+
+      const formatDate = (d: Date) => d.toISOString().split("T")[0];
+      const startDateStr = formatDate(today);
+      const endDateStr = formatDate(endDate);
+
+      const associations = await getSpaceEvents(spaceId, startDateStr, endDateStr);
+      if (associations.length === 0) {
+        setUpcomingEvents([]);
+        return;
+      }
+
+      // Try to enrich with EventKit data
+      let calendarEvents: CalendarEvent[] = [];
+      try {
+        const calendarIdsJson = await getSetting("selected_calendar_ids");
+        if (calendarIdsJson) {
+          const calendarIds: string[] = JSON.parse(calendarIdsJson);
+          if (calendarIds.length > 0) {
+            // Fetch events for each day in the range
+            const dateSet = new Set<string>();
+            for (const assoc of associations) {
+              dateSet.add(assoc.associated_date);
+            }
+            const fetches = Array.from(dateSet).map((date) =>
+              getEventsForDate(calendarIds, date)
+            );
+            const results = await Promise.all(fetches);
+            calendarEvents = results.flat();
+          }
+        }
+      } catch (err) {
+        console.error("Failed to enrich events from EventKit:", err);
+      }
+
+      // Build a map of external event ID to calendar event
+      const eventMap = new Map<string, CalendarEvent>();
+      for (const ev of calendarEvents) {
+        eventMap.set(ev.id, ev);
+      }
+
+      const enriched = associations.map((assoc) => ({
+        association: assoc,
+        calendarEvent: eventMap.get(assoc.event_id_external),
+      }));
+
+      setUpcomingEvents(enriched);
+    } catch (error) {
+      console.error("Failed to load upcoming events:", error);
+      setUpcomingEvents([]);
+    }
+  }
+
   const saveContext = useCallback(async (newContent: string) => {
     if (selectedSpace) {
       try {
@@ -94,6 +158,49 @@ function SpaceHome({
       }
     }
   }, [selectedSpace]);
+
+  useEffect(() => {
+    if (isAddingTask && newTaskInputRef.current) {
+      newTaskInputRef.current.focus();
+    }
+  }, [isAddingTask]);
+
+  async function handleCreateInlineTask() {
+    const title = newTaskTitle.trim();
+    setIsAddingTask(false);
+    setNewTaskTitle("");
+    if (!title || !selectedSpace) return;
+    try {
+      const created = await createTask({ space_id: selectedSpace.id, title, status: "todo" });
+      const taskWithSubtasks: TaskWithSubTasks = { ...created, subtasks: [] };
+      setTasks((prev) => [taskWithSubtasks, ...prev]);
+      onTaskCreated?.(taskWithSubtasks);
+    } catch (error) {
+      console.error("Failed to create task:", error);
+      alert("Failed to create task: " + (error as Error).message);
+    }
+  }
+
+  function handleNewTaskKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      newTaskSubmittingRef.current = true;
+      handleCreateInlineTask();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      newTaskSubmittingRef.current = true;
+      setIsAddingTask(false);
+      setNewTaskTitle("");
+    }
+  }
+
+  function handleNewTaskBlur() {
+    if (newTaskSubmittingRef.current) {
+      newTaskSubmittingRef.current = false;
+      return;
+    }
+    handleCreateInlineTask();
+  }
 
   const handleTitleClick = () => {
     if (selectedSpace) {
@@ -105,14 +212,11 @@ function SpaceHome({
 
   const handleTitleSave = async () => {
     if (!selectedSpace) return;
-
     const trimmedTitle = editedTitle.trim();
-
     if (!trimmedTitle) {
       setTitleError("Name the space to get started");
       return;
     }
-
     try {
       await onUpdateSpaceTitle(selectedSpace.id, trimmedTitle);
       setIsEditingTitle(false);
@@ -139,260 +243,385 @@ function SpaceHome({
     }
   };
 
+  async function handleUntagEvent(eventId: string) {
+    if (!selectedSpace) return;
+    try {
+      await untagEventFromSpace(selectedSpace.id, eventId);
+      await loadUpcomingEvents(selectedSpace.id);
+    } catch (error) {
+      console.error("Failed to untag event:", error);
+    }
+  }
+
+  function formatEventDateTime(association: EventSpaceAssociation, calendarEvent?: CalendarEvent): string {
+    const date = new Date(association.associated_date + "T00:00:00");
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const dateStr = `${monthNames[date.getMonth()]} ${date.getDate()}`;
+
+    if (calendarEvent && !calendarEvent.is_all_day) {
+      const start = new Date(calendarEvent.start_date);
+      const hours = start.getHours();
+      const minutes = start.getMinutes();
+      const ampm = hours >= 12 ? "PM" : "AM";
+      const h = hours % 12 || 12;
+      const m = minutes.toString().padStart(2, "0");
+      return `${dateStr}, ${h}:${m} ${ampm}`;
+    }
+
+    return dateStr;
+  }
+
+  if (!selectedSpace) {
+    return (
+      <div style={{
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        textAlign: "center",
+        padding: "32px 24px",
+      }}>
+        <Heading sx={{ fontSize: "24px", fontWeight: 600, mb: 3, color: "fg.default" }}>
+          Welcome to Orcas
+        </Heading>
+        <Text sx={{ fontSize: 2, color: "fg.muted", mb: 4 }}>
+          Create your first space to get started!
+        </Text>
+        <Button variant="primary" size="large" onClick={onShowNewSpaceDialog}>
+          Create First Space
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ flex: 1, overflow: "auto" }}>
-      {selectedSpace && (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-          {/* Header with space title and Add Task button */}
-          <div
-            style={{
-              padding: "24px 32px",
-              borderBottom: "1px solid var(--borderColor-default, #d0d7de)",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
+    <div style={{
+      flex: 1,
+      display: "flex",
+      flexDirection: "column",
+      padding: "32px",
+      gap: "32px",
+      height: "100%",
+      overflow: "hidden",
+      backgroundColor: "white",
+    }}>
+      {/* Page title */}
+      <div style={{ flexShrink: 0 }}>
+        {isEditingTitle ? (
+          <div>
+            <TextInput
+              ref={titleInputRef}
+              value={editedTitle}
+              onChange={(e) => {
+                setEditedTitle(e.target.value);
+                setTitleError("");
+              }}
+              onKeyDown={handleTitleKeyDown}
+              onBlur={handleTitleSave}
+              placeholder="Enter space name..."
+              sx={{
+                fontSize: "24px",
+                fontWeight: 600,
+                border: titleError
+                  ? "2px solid #cf222e"
+                  : "2px solid var(--borderColor-default, #d0d7de)",
+                borderRadius: "6px",
+                padding: "4px 8px",
+                maxWidth: "500px",
+              }}
+            />
+            {titleError && (
+              <Text sx={{ fontSize: 1, color: "#cf222e", display: "block", mt: 1 }}>
+                {titleError}
+              </Text>
+            )}
+          </div>
+        ) : (
+          <Heading
+            onClick={handleTitleClick}
+            sx={{
+              fontSize: "24px",
+              fontWeight: 600,
+              color: "#333",
+              cursor: "pointer",
+              lineHeight: "normal",
+              "&:hover": { opacity: 0.75 },
             }}
           >
-            <div style={{ flex: 1, marginRight: "16px" }}>
-              {isEditingTitle ? (
-                <div>
-                  <TextInput
-                    ref={titleInputRef}
-                    value={editedTitle}
-                    onChange={(e) => {
-                      setEditedTitle(e.target.value);
-                      setTitleError("");
-                    }}
-                    onKeyDown={handleTitleKeyDown}
-                    onBlur={handleTitleSave}
-                    placeholder="Enter space name..."
-                    sx={{
-                      fontSize: 4,
-                      fontWeight: 600,
-                      color: selectedSpace.color,
-                      border: titleError ? "2px solid #cf222e" : "2px solid var(--borderColor-default, #d0d7de)",
-                      borderRadius: "6px",
-                      padding: "8px 12px",
-                      width: "100%",
-                      maxWidth: "500px",
-                    }}
-                  />
-                  {titleError && (
-                    <Text
-                      sx={{
-                        fontSize: 1,
-                        color: "#cf222e",
-                        display: "block",
-                        mt: 1,
-                      }}
-                    >
-                      {titleError}
-                    </Text>
-                  )}
-                </div>
-              ) : (
-                <Heading
-                  onClick={handleTitleClick}
-                  sx={{
-                    fontSize: 4,
-                    color: selectedSpace.color,
-                    cursor: "pointer",
-                    "&:hover": {
-                      opacity: 0.8,
-                    },
+            {selectedSpace.title}
+          </Heading>
+        )}
+      </div>
+
+      {/* Two-column content */}
+      <div style={{
+        display: "flex",
+        gap: "48px",
+        flex: 1,
+        overflow: "hidden",
+        minHeight: 0,
+      }}>
+        {/* Left column — Up Next */}
+        <div style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          gap: "32px",
+          height: "100%",
+          overflow: "auto",
+          minWidth: 0,
+        }}>
+          {/* Upcoming Events */}
+          {upcomingEvents.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px", flexShrink: 0 }}>
+              <Heading sx={{ fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal", marginBottom: "8px" }}>
+                Upcoming Events
+              </Heading>
+              {upcomingEvents.map((item) => (
+                <div
+                  key={item.association.id}
+                  style={{
+                    display: "flex",
+                    gap: "12px",
+                    alignItems: "center",
+                    padding: "4px 12px",
+                    height: "32px",
+                    borderRadius: "6px",
+                    backgroundColor: "white",
                   }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#f6f6f6"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "white"; }}
                 >
-                  {selectedSpace.title}
-                </Heading>
-              )}
+                  <Text sx={{ fontSize: "13px", color: "#828282", whiteSpace: "nowrap", flexShrink: 0 }}>
+                    [{formatEventDateTime(item.association, item.calendarEvent)}]
+                  </Text>
+                  <Text sx={{
+                    fontSize: "16px",
+                    color: "#333",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    flex: 1,
+                    minWidth: 0,
+                  }}>
+                    {item.association.event_title}
+                  </Text>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleUntagEvent(item.association.event_id_external);
+                    }}
+                    style={{
+                      width: "20px",
+                      height: "20px",
+                      borderRadius: "4px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                      flexShrink: 0,
+                      opacity: 0.5,
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.5"; }}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#828282" strokeWidth="1.5" strokeLinecap="round">
+                      <path d="M1 1l8 8M9 1l-8 8" />
+                    </svg>
+                  </div>
+                </div>
+              ))}
             </div>
-            <Button variant="primary" onClick={onShowNewTaskDialog}>
-              + Add Task
-            </Button>
+          )}
+
+          {/* Section header */}
+          <div style={{ flexShrink: 0 }}>
+            <Heading sx={{ fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal" }}>
+              Up Next
+            </Heading>
           </div>
 
-          {/* Two-column layout */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "24px",
-            padding: "32px",
-            flex: 1,
-            overflow: "hidden"
-          }}>
-            {/* Left column: Space Context */}
-            <div style={{
-              display: "flex",
-              flexDirection: "column",
-              border: "1px solid var(--borderColor-default, #d0d7de)",
-              borderRadius: "6px",
-              overflow: "hidden",
-              backgroundColor: "var(--bgColor-default, #ffffff)",
-            }}>
-              {/* Context header */}
+          {/* Task list */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            {/* Add a new task row */}
+            {isAddingTask ? (
               <div style={{
-                padding: "16px",
-                borderBottom: "1px solid var(--borderColor-default, #d0d7de)",
-                backgroundColor: "var(--bgColor-muted, #f6f8fa)",
                 display: "flex",
-                justifyContent: "space-between",
+                gap: "12px",
                 alignItems: "center",
+                padding: "4px 12px",
+                height: "32px",
+                borderRadius: "6px",
+                backgroundColor: "white",
               }}>
-                <Heading
-                  sx={{
-                    fontSize: 1,
-                    color: "fg.default",
-                    fontWeight: 600,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
-                    margin: 0,
-                  }}
-                >
-                  Overview
-                </Heading>
-              </div>
-
-              {/* Context editor */}
-              <div className="context-editor-pane" style={{
-                flex: 1,
-                overflow: "hidden",
-                padding: "16px",
-              }}>
-                {isContextLoading ? (
-                  <Text sx={{ fontSize: 1, color: "fg.muted", padding: "8px" }}>
-                    Loading context...
-                  </Text>
-                ) : (
-                  <MDXEditor
-                    key={selectedSpace.id}
-                    markdown={contextContent}
-                    onChange={(newContent) => {
-                      setContextContent(newContent);
-                      saveContext(newContent);
-                    }}
-                    plugins={[
-                      headingsPlugin(),
-                      listsPlugin(),
-                      quotePlugin(),
-                      thematicBreakPlugin(),
-                      markdownShortcutPlugin(),
-                    ]}
-                    contentEditableClassName="mdx-editor-content"
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* Right column: Tasks list */}
-            <div style={{
-              display: "flex",
-              flexDirection: "column",
-              overflow: "auto",
-              gap: "12px",
-            }}>
-              {sortedTasks.length === 0 ? (
-                <div
-                  style={{
-                    padding: "24px",
-                    backgroundColor: "var(--bgColor-muted, #f6f8fa)",
-                    border: "1px solid var(--borderColor-default, #d0d7de)",
-                    borderRadius: "6px",
-                    textAlign: "center",
-                  }}
-                >
-                  <Text sx={{ fontSize: 1, color: "fg.muted" }}>
-                    No tasks yet
-                  </Text>
+                <div style={{
+                  width: "16px",
+                  height: "16px",
+                  borderRadius: "4px",
+                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#828282" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 1v10M1 6h10" />
+                  </svg>
                 </div>
-              ) : (
-                sortedTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    style={{
-                      backgroundColor: "var(--bgColor-default, #ffffff)",
-                      border: "1px solid var(--borderColor-default, #d0d7de)",
-                      borderLeft: `4px solid ${selectedSpace.color}`,
-                      borderRadius: "6px",
-                      padding: "16px",
-                      cursor: "pointer",
-                      transition: "box-shadow 0.2s ease",
-                    }}
-                    onClick={() => onTaskClick(task.id)}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.boxShadow =
-                        "0 3px 6px rgba(140, 149, 159, 0.15)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.boxShadow = "none";
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        marginBottom: task.description ? "8px" : "0",
-                      }}
-                    >
-                      <Heading
-                        sx={{
-                          fontSize: 2,
-                          color: "fg.default",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {task.title}
-                      </Heading>
-                      <StatusChip variant={task.status}>
-                        {task.status.replace("_", " ").toUpperCase()}
-                      </StatusChip>
-                    </div>
-                    {task.description && (
-                      <Text
-                        sx={{
-                          fontSize: 1,
-                          color: "fg.muted",
-                          display: "block",
-                          mt: 2,
-                        }}
-                      >
-                        {task.description}
-                      </Text>
+                <input
+                  ref={newTaskInputRef}
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  onKeyDown={handleNewTaskKeyDown}
+                  onBlur={handleNewTaskBlur}
+                  style={{
+                    flex: 1,
+                    fontSize: "16px",
+                    color: "#333",
+                    border: "none",
+                    outline: "none",
+                    background: "transparent",
+                    lineHeight: "normal",
+                    fontFamily: "inherit",
+                    minWidth: 0,
+                  }}
+                />
+              </div>
+            ) : (
+              <div
+                onClick={() => setIsAddingTask(true)}
+                style={{
+                  display: "flex",
+                  gap: "12px",
+                  alignItems: "center",
+                  padding: "4px 12px",
+                  height: "32px",
+                  borderRadius: "6px",
+                  backgroundColor: "white",
+                  cursor: "pointer",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#f6f6f6"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "white"; }}
+              >
+                <div style={{
+                  width: "16px",
+                  height: "16px",
+                  borderRadius: "4px",
+                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#828282" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 1v10M1 6h10" />
+                  </svg>
+                </div>
+                <span style={{ fontSize: "16px", color: "#828282", lineHeight: "normal" }}>
+                  Add a new task
+                </span>
+              </div>
+            )}
+
+            {sortedTasks.map((task) => (
+                <div
+                  key={task.id}
+                  onClick={() => onTaskClick(task.id)}
+                  style={{
+                    display: "flex",
+                    gap: "12px",
+                    alignItems: "center",
+                    padding: "4px 12px",
+                    height: "32px",
+                    borderRadius: "6px",
+                    backgroundColor: "white",
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#f6f6f6"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "white"; }}
+                >
+                  {/* Checkbox */}
+                  <div style={{
+                    width: "16px",
+                    height: "16px",
+                    border: "1px solid #bdbdbd",
+                    borderRadius: "4px",
+                    flexShrink: 0,
+                    backgroundColor: task.status === "done" ? "#2f80ed" : "white",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}>
+                    {task.status === "done" && (
+                      <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                        <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
                     )}
                   </div>
-                ))
-              )}
-            </div>
+                  <span style={{
+                    fontSize: "16px",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    color: task.status === "done" ? "#828282" : "#333",
+                    textDecoration: task.status === "done" ? "line-through" : "none",
+                    lineHeight: "normal",
+                  }}>
+                    {task.title}
+                  </span>
+                </div>
+              ))
+            }
           </div>
         </div>
-      )}
 
-      {!selectedSpace && (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            height: "calc(100vh - 120px)",
-            textAlign: "center",
-          }}
-        >
-          <Heading sx={{ fontSize: 4, mb: 3, color: "fg.default" }}>
-            Welcome to Orcas
-          </Heading>
-          <Text sx={{ fontSize: 2, color: "fg.muted", mb: 4 }}>
-            Create your first space to get started!
-          </Text>
-          <Button
-            variant="primary"
-            size="large"
-            onClick={onShowNewSpaceDialog}
-          >
-            Create First Space
-          </Button>
+        {/* Right column — Context + Documents */}
+        <div style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          gap: "32px",
+          height: "100%",
+          overflow: "auto",
+          minWidth: 0,
+        }}>
+          {/* Context section */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", minHeight: 0 }}>
+            <Heading sx={{ fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal", flexShrink: 0 }}>
+              Context
+            </Heading>
+            {isContextLoading ? (
+              <Text sx={{ fontSize: 2, color: "fg.muted" }}>Loading context...</Text>
+            ) : (
+              <div className="context-editor-pane" style={{ flex: 1 }}>
+                <MDXEditor
+                  key={selectedSpace.id}
+                  markdown={contextContent}
+                  onChange={(newContent) => {
+                    setContextContent(newContent);
+                    saveContext(newContent);
+                  }}
+                  plugins={[
+                    headingsPlugin(),
+                    listsPlugin(),
+                    quotePlugin(),
+                    thematicBreakPlugin(),
+                    markdownShortcutPlugin(),
+                  ]}
+                  contentEditableClassName="mdx-editor-content"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Documents section */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", flexShrink: 0 }}>
+            <Heading sx={{ fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal" }}>
+              Documents
+            </Heading>
+            <Text sx={{ fontSize: 2, color: "fg.muted" }}>No documents yet</Text>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

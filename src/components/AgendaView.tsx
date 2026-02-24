@@ -1,16 +1,20 @@
 import { useState } from 'react';
 import { Box, Text, Heading, Button, IconButton } from '@primer/react';
 import { CalendarIcon, SyncIcon, VideoIcon } from '@primer/octicons-react';
-import type { CalendarEvent } from '../types';
+import type { CalendarEvent, EventSpaceTagWithSpace, Space } from '../types';
 import EventPopover from './EventPopover';
 import { extractMeetingLink, removeVideoConferencingUrls, formatAttendees } from '../utils/videoConferencing';
 
 interface AgendaViewProps {
   events: CalendarEvent[];
   onRefresh: () => void;
+  eventSpaceTags?: Record<string, EventSpaceTagWithSpace[]>;
+  spaces?: Space[];
+  onTagSpace?: (eventId: string, spaceId: number) => void;
+  onUntagSpace?: (eventId: string, spaceId: number) => void;
 }
 
-export default function AgendaView({ events, onRefresh }: AgendaViewProps) {
+export default function AgendaView({ events, onRefresh, eventSpaceTags, spaces, onTagSpace, onUntagSpace }: AgendaViewProps) {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [popoverAnchor, setPopoverAnchor] = useState<HTMLElement | null>(null);
 
@@ -181,6 +185,24 @@ export default function AgendaView({ events, onRefresh }: AgendaViewProps) {
                               {attendeesText}
                             </Text>
                           )}
+                          {eventSpaceTags?.[event.id]?.length ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                              {eventSpaceTags[event.id].map((tag) => (
+                                <span
+                                  key={tag.space_id}
+                                  title={tag.space_title}
+                                  style={{
+                                    display: 'inline-block',
+                                    width: '8px',
+                                    height: '8px',
+                                    borderRadius: '50%',
+                                    backgroundColor: tag.space_color || '#6e7781',
+                                    flexShrink: 0,
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          ) : null}
                         </Box>
                       </Box>
                     </Box>
@@ -282,6 +304,24 @@ export default function AgendaView({ events, onRefresh }: AgendaViewProps) {
                               {attendeesText}
                             </Text>
                           )}
+                          {eventSpaceTags?.[event.id]?.length ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                              {eventSpaceTags[event.id].map((tag) => (
+                                <span
+                                  key={tag.space_id}
+                                  title={tag.space_title}
+                                  style={{
+                                    display: 'inline-block',
+                                    width: '8px',
+                                    height: '8px',
+                                    borderRadius: '50%',
+                                    backgroundColor: tag.space_color || '#6e7781',
+                                    flexShrink: 0,
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          ) : null}
                         </Box>
                       </Box>
                     </Box>
@@ -298,6 +338,10 @@ export default function AgendaView({ events, onRefresh }: AgendaViewProps) {
           event={selectedEvent}
           anchorElement={popoverAnchor}
           onClose={handleClosePopover}
+          spaces={spaces}
+          taggedSpaces={eventSpaceTags?.[selectedEvent.id]}
+          onTagSpace={onTagSpace ? (spaceId) => onTagSpace(selectedEvent.id, spaceId) : undefined}
+          onUntagSpace={onUntagSpace ? (spaceId) => onUntagSpace(selectedEvent.id, spaceId) : undefined}
         />
       )}
     </Box>

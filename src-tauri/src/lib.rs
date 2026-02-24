@@ -267,6 +267,138 @@ async fn get_recently_edited_tasks(
     .map_err(|e| format!("Database error: {}", e))
 }
 
+// Event-space tagging commands
+
+#[derive(Debug, Serialize, Deserialize)]
+struct EventSpaceAssociation {
+    id: i64,
+    space_id: i64,
+    event_id_external: String,
+    event_title: String,
+    associated_date: String,
+    created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct EventSpaceTagWithSpace {
+    id: i64,
+    space_id: i64,
+    event_id_external: String,
+    event_title: String,
+    associated_date: String,
+    created_at: String,
+    space_title: String,
+    space_color: String,
+}
+
+#[tauri::command]
+async fn tag_event_to_space(
+    space_id: i64,
+    event_id: String,
+    event_title: String,
+    event_date: String,
+) -> Result<(), String> {
+    let pool = settings::get_db_pool()?;
+
+    sqlx::query(
+        "INSERT OR IGNORE INTO event_space_associations (space_id, event_id_external, event_title, associated_date) VALUES (?, ?, ?, ?)"
+    )
+    .bind(space_id)
+    .bind(&event_id)
+    .bind(&event_title)
+    .bind(&event_date)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("Failed to tag event: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn untag_event_from_space(
+    space_id: i64,
+    event_id: String,
+) -> Result<(), String> {
+    let pool = settings::get_db_pool()?;
+
+    sqlx::query(
+        "DELETE FROM event_space_associations WHERE space_id = ? AND event_id_external = ?"
+    )
+    .bind(space_id)
+    .bind(&event_id)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("Failed to untag event: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_event_space_tags(
+    event_id: String,
+) -> Result<Vec<EventSpaceTagWithSpace>, String> {
+    let pool = settings::get_db_pool()?;
+
+    let rows = sqlx::query_as::<_, (i64, i64, String, String, String, String, String, String)>(
+        r#"
+        SELECT esa.id, esa.space_id, esa.event_id_external, esa.event_title, esa.associated_date, esa.created_at,
+               s.title as space_title, s.color as space_color
+        FROM event_space_associations esa
+        JOIN spaces s ON s.id = esa.space_id
+        WHERE esa.event_id_external = ?
+        ORDER BY s.title ASC
+        "#
+    )
+    .bind(&event_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("Failed to get event tags: {}", e))?;
+
+    Ok(rows.into_iter().map(|r| EventSpaceTagWithSpace {
+        id: r.0,
+        space_id: r.1,
+        event_id_external: r.2,
+        event_title: r.3,
+        associated_date: r.4,
+        created_at: r.5,
+        space_title: r.6,
+        space_color: r.7,
+    }).collect())
+}
+
+#[tauri::command]
+async fn get_space_events(
+    space_id: i64,
+    start_date: String,
+    end_date: String,
+) -> Result<Vec<EventSpaceAssociation>, String> {
+    let pool = settings::get_db_pool()?;
+
+    let rows = sqlx::query_as::<_, (i64, i64, String, String, String, String)>(
+        r#"
+        SELECT id, space_id, event_id_external, event_title, associated_date, created_at
+        FROM event_space_associations
+        WHERE space_id = ? AND associated_date >= ? AND associated_date <= ?
+        ORDER BY associated_date ASC
+        "#
+    )
+    .bind(space_id)
+    .bind(&start_date)
+    .bind(&end_date)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("Failed to get space events: {}", e))?;
+
+    Ok(rows.into_iter().map(|r| EventSpaceAssociation {
+        id: r.0,
+        space_id: r.1,
+        event_id_external: r.2,
+        event_title: r.3,
+        associated_date: r.4,
+        created_at: r.5,
+    }).collect())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![
@@ -396,6 +528,12 @@ pub fn run() {
             sql: include_str!("../migrations/021_add_web_search_to_agents.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 22,
+            description: "create_event_space_associations",
+            sql: include_str!("../migrations/022_create_event_space_associations.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -469,7 +607,11 @@ pub fn run() {
             open_calendar_settings,
             get_tasks_scheduled_for_date,
             get_recently_edited_tasks,
-            chat::test_connection
+            chat::test_connection,
+            tag_event_to_space,
+            untag_event_from_space,
+            get_event_space_tags,
+            get_space_events,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

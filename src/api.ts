@@ -13,6 +13,8 @@ import type {
   Calendar,
   CalendarEvent,
   PermissionStatus,
+  EventSpaceAssociation,
+  EventSpaceTagWithSpace,
 } from "./types";
 
 let db: Database | null = null;
@@ -619,6 +621,37 @@ export async function getRecentlyEditedTasks(hoursAgo: number): Promise<Task[]> 
     console.error("Failed to get recently edited tasks:", error);
     throw error;
   }
+}
+
+// Event-space tagging operations
+export async function tagEventToSpace(
+  spaceId: number,
+  eventId: string,
+  eventTitle: string,
+  eventDate: string,
+): Promise<void> {
+  await invoke("tag_event_to_space", { spaceId, eventId, eventTitle, eventDate });
+}
+
+export async function untagEventFromSpace(
+  spaceId: number,
+  eventId: string,
+): Promise<void> {
+  await invoke("untag_event_from_space", { spaceId, eventId });
+}
+
+export async function getEventSpaceTags(
+  eventId: string,
+): Promise<EventSpaceTagWithSpace[]> {
+  return await invoke<EventSpaceTagWithSpace[]>("get_event_space_tags", { eventId });
+}
+
+export async function getSpaceEvents(
+  spaceId: number,
+  startDate: string,
+  endDate: string,
+): Promise<EventSpaceAssociation[]> {
+  return await invoke<EventSpaceAssociation[]>("get_space_events", { spaceId, startDate, endDate });
 }
 
 // Update task scheduled date

@@ -138,3 +138,17 @@ export interface CalendarEvent {
 }
 
 export type PermissionStatus = 'notdetermined' | 'restricted' | 'denied' | 'authorized';
+
+export interface EventSpaceAssociation {
+  id: number;
+  space_id: number;
+  event_id_external: string;
+  event_title: string;
+  associated_date: string;
+  created_at: string;
+}
+
+export interface EventSpaceTagWithSpace extends EventSpaceAssociation {
+  space_title: string;
+  space_color: string;
+}

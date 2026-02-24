@@ -1,16 +1,20 @@
 import { useEffect, useRef } from 'react';
-import { Box, Text, Heading, IconButton } from '@primer/react';
-import { XIcon, ClockIcon, LocationIcon, PeopleIcon, LinkIcon } from '@primer/octicons-react';
-import type { CalendarEvent } from '../types';
+import { Box, Text, Heading, IconButton, ActionMenu, ActionList, Button } from '@primer/react';
+import { XIcon, ClockIcon, LocationIcon, PeopleIcon, LinkIcon, PlusIcon, XCircleFillIcon } from '@primer/octicons-react';
+import type { CalendarEvent, Space, EventSpaceTagWithSpace } from '../types';
 import { extractMeetingLink } from '../utils/videoConferencing';
 
 interface EventPopoverProps {
   event: CalendarEvent;
   anchorElement: HTMLElement;
   onClose: () => void;
+  spaces?: Space[];
+  taggedSpaces?: EventSpaceTagWithSpace[];
+  onTagSpace?: (spaceId: number) => void;
+  onUntagSpace?: (spaceId: number) => void;
 }
 
-export default function EventPopover({ event, anchorElement, onClose }: EventPopoverProps) {
+export default function EventPopover({ event, anchorElement, onClose, spaces, taggedSpaces, onTagSpace, onUntagSpace }: EventPopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -78,6 +82,11 @@ export default function EventPopover({ event, anchorElement, onClose }: EventPop
   };
 
   const meetingLink = extractMeetingLink(event);
+
+  const resolvedTaggedSpaces = taggedSpaces ?? [];
+  const resolvedSpaces = spaces ?? [];
+  const taggedSpaceIds = new Set(resolvedTaggedSpaces.map(ts => ts.space_id));
+  const untaggedSpaces = resolvedSpaces.filter(s => !taggedSpaceIds.has(s.id));
 
   return (
     <>
@@ -197,6 +206,83 @@ export default function EventPopover({ event, anchorElement, onClose }: EventPop
             </Text>
           </Box>
         )}
+
+        {/* Tag to Space */}
+        {spaces && <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--borderColor-default, #d0d7de)' }}>
+          <Text sx={{ fontSize: 1, fontWeight: 'semibold', display: 'block', mb: 2 }}>
+            Spaces
+          </Text>
+
+          {resolvedTaggedSpaces.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+              {resolvedTaggedSpaces.map(tagged => (
+                <span
+                  key={tagged.id}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    border: '1px solid var(--borderColor-default, #d0d7de)',
+                    fontSize: '12px',
+                    lineHeight: '20px',
+                    background: 'var(--bgColor-muted, #f6f8fa)',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor: tagged.space_color,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span>{tagged.space_title}</span>
+                  <IconButton
+                    icon={XCircleFillIcon}
+                    variant="invisible"
+                    aria-label={`Remove from ${tagged.space_title}`}
+                    size="small"
+                    onClick={() => onUntagSpace?.(tagged.space_id)}
+                    sx={{ padding: 0, width: '16px', height: '16px', color: 'fg.muted' }}
+                  />
+                </span>
+              ))}
+            </div>
+          )}
+
+          {untaggedSpaces.length > 0 && (
+            <ActionMenu>
+              <ActionMenu.Anchor>
+                <Button size="small" leadingVisual={PlusIcon} variant="invisible">
+                  Add to space
+                </Button>
+              </ActionMenu.Anchor>
+              <ActionMenu.Overlay>
+                <ActionList>
+                  {untaggedSpaces.map(space => (
+                    <ActionList.Item key={space.id} onSelect={() => onTagSpace?.(space.id)}>
+                      <ActionList.LeadingVisual>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            width: '10px',
+                            height: '10px',
+                            borderRadius: '50%',
+                            backgroundColor: space.color,
+                          }}
+                        />
+                      </ActionList.LeadingVisual>
+                      {space.title}
+                    </ActionList.Item>
+                  ))}
+                </ActionList>
+              </ActionMenu.Overlay>
+            </ActionMenu>
+          )}
+        </div>}
       </Box>
     </>
   );
