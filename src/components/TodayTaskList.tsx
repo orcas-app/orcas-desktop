@@ -169,9 +169,10 @@ export default function TodayTaskList({ tasks, spaces, onRefresh, onTaskClick }:
                 </span>
               </div>
               <div style={{
-                height: '1px',
+                height: '2px',
                 backgroundColor: space?.color || '#bdbdbd',
                 width: '100%',
+                borderRadius: '1px',
               }} />
             </div>
 
