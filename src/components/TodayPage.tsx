@@ -1,15 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Spinner } from '@primer/react';
+import ReactMarkdown from 'react-markdown';
+import { invoke } from '@tauri-apps/api/core';
 import AgendaView from './AgendaView';
 import TodayTaskList from './TodayTaskList';
-import type { CalendarEvent, Task, Space, Agent, EventSpaceTagWithSpace } from '../types';
-import { getEventsForDate, getTasksScheduledForDate, getRecentlyEditedTasks, getAllSpaces, getEventSpaceTags, tagEventToSpace, untagEventFromSpace, getAllAgents } from '../api';
+import type { CalendarEvent, Task, Space, Agent, EventSpaceTagWithSpace, ChatMessage } from '../types';
+import { getEventsForDate, getTasksScheduledForDate, getRecentlyEditedTasks, getAllSpaces, getEventSpaceTags, tagEventToSpace, untagEventFromSpace, getAllAgents, getSetting } from '../api';
+import { withRetry } from '../utils/retry';
+import { compactMessages } from '../utils/tokenEstimation';
 
 interface TodayPageProps {
   onTaskClick?: (taskId: number) => void;
-  onStartChat?: (agentId: number, message: string) => void;
 }
 
-export default function TodayPage({ onTaskClick, onStartChat }: TodayPageProps) {
+export default function TodayPage({ onTaskClick }: TodayPageProps) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,6 +27,25 @@ export default function TodayPage({ onTaskClick, onStartChat }: TodayPageProps) 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Chat conversation state
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [currentStreamingMessage, setCurrentStreamingMessage] = useState<ChatMessage | null>(null);
+  const [conversationOpen, setConversationOpen] = useState(true);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  const generateId = () => Math.random().toString(36).substring(7);
+
+  const getMaxTokensForModel = (modelName: string): number => {
+    const limits: Record<string, number> = {
+      'claude-sonnet-4-5': 8192,
+      'claude-opus-4-5': 16384,
+    };
+    return limits[modelName] || 8192;
+  };
+
   const getTodayDate = (): string => {
     const today = new Date();
     const year = today.getFullYear();
@@ -30,6 +53,55 @@ export default function TodayPage({ onTaskClick, onStartChat }: TodayPageProps) 
     const day = String(today.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
+
+  const scrollToBottom = () => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: 'smooth',
+      });
+    }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, currentStreamingMessage]);
+
+  // Persist messages to localStorage
+  useEffect(() => {
+    if (messages.length > 0 && selectedAgent) {
+      localStorage.setItem(
+        `chat-today-agent-${selectedAgent.id}`,
+        JSON.stringify(messages),
+      );
+    }
+  }, [messages, selectedAgent]);
+
+  const loadPersistedMessages = (agent: Agent) => {
+    try {
+      const saved = localStorage.getItem(`chat-today-agent-${agent.id}`);
+      if (saved) {
+        const parsedMessages = JSON.parse(saved).map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+        }));
+        setMessages(parsedMessages);
+      } else {
+        setMessages([]);
+      }
+    } catch (err) {
+      console.error('Failed to load persisted messages:', err);
+      setMessages([]);
+    }
+  };
+
+  // Load persisted messages when agent changes
+  useEffect(() => {
+    if (selectedAgent) {
+      loadPersistedMessages(selectedAgent);
+    }
+  }, [selectedAgent?.id]);
 
   const loadTodayData = async () => {
     setLoading(true);
@@ -90,6 +162,13 @@ export default function TodayPage({ onTaskClick, onStartChat }: TodayPageProps) 
       } catch (agentsError) {
         console.warn('Failed to load agents:', agentsError);
       }
+
+      try {
+        const savedApiKey = await getSetting('anthropic_api_key');
+        setApiKey(savedApiKey);
+      } catch (err) {
+        console.error('Failed to load API key:', err);
+      }
     } catch (err) {
       console.error('Error loading today data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load today data');
@@ -139,10 +218,233 @@ export default function TodayPage({ onTaskClick, onStartChat }: TodayPageProps) 
     }
   };
 
-  const handleSendChat = () => {
-    if (!chatInput.trim() || !selectedAgent || !onStartChat) return;
-    onStartChat(selectedAgent.id, chatInput.trim());
+  const buildAgendaContext = (): string => {
+    const parts: string[] = [];
+
+    if (events.length > 0) {
+      parts.push('## Today\'s Calendar Events');
+      for (const event of events) {
+        const start = new Date(event.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const end = new Date(event.end_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        let line = `- ${event.title} (${event.is_all_day ? 'All day' : `${start} - ${end}`})`;
+        if (event.location) line += ` at ${event.location}`;
+        parts.push(line);
+      }
+    }
+
+    if (tasks.length > 0) {
+      parts.push('\n## Today\'s Tasks');
+      for (const task of tasks) {
+        parts.push(`- [${task.status}] ${task.title}${task.priority ? ` (${task.priority} priority)` : ''}`);
+      }
+    }
+
+    return parts.join('\n');
+  };
+
+  const handleSendChat = async () => {
+    if (!chatInput.trim() || !selectedAgent || isStreaming) return;
+
+    const trimmedInput = chatInput.trim();
     setChatInput('');
+
+    const userMessage: ChatMessage = {
+      id: generateId(),
+      role: 'user',
+      content: trimmedInput,
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setConversationOpen(true);
+    setIsStreaming(true);
+
+    const assistantMessage: ChatMessage = {
+      id: generateId(),
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+      streaming: true,
+    };
+
+    setCurrentStreamingMessage(assistantMessage);
+
+    let accumulatedContent = '';
+
+    try {
+      // Build conversation history for API
+      const conversationMessages = messages
+        .map(msg => {
+          const textContent = typeof msg.content === 'string'
+            ? msg.content
+            : Array.isArray(msg.content)
+              ? msg.content
+                  .filter((block: any) => block.type === 'text')
+                  .map((block: any) => block.text)
+                  .join('')
+              : '';
+          return {
+            role: msg.role === 'user' ? 'user' : 'assistant',
+            content: textContent,
+          };
+        })
+        .filter(msg => msg.content.trim().length > 0);
+
+      conversationMessages.push({
+        role: 'user',
+        content: trimmedInput,
+      });
+
+      const compactedMessages = compactMessages(conversationMessages);
+
+      const agendaContext = buildAgendaContext();
+      const systemMessage = `${selectedAgent.agent_prompt || `You are ${selectedAgent.name}, a helpful AI assistant.`}
+
+You are helping the user plan and organise their day. Here is the context for today:
+
+${agendaContext}
+
+Use this context to help the user manage their schedule, prioritise tasks, and plan their day effectively.`;
+
+      const modelName = selectedAgent.model_name || 'claude-sonnet-4-5';
+      const maxTokens = getMaxTokensForModel(modelName);
+
+      // Build tools list (web search only, no MCP tools for today page)
+      let toolsToSend: any[] | undefined = undefined;
+      if (selectedAgent.web_search_enabled) {
+        toolsToSend = [{
+          type: 'web_search_20250305',
+          name: 'web_search',
+          max_uses: 5,
+        }];
+      }
+
+      let responseText: string = await withRetry(
+        () => invoke<string>('send_chat_message', {
+          model: modelName,
+          messages: compactedMessages,
+          system: systemMessage,
+          maxTokens: maxTokens,
+          tools: toolsToSend,
+          apiKey: apiKey || undefined,
+        }),
+        {
+          maxRetries: 3,
+          baseDelay: 1000,
+          onRetry: (attempt, error) => {
+            console.log(`Retry attempt ${attempt} after error:`, error.message);
+          },
+        }
+      );
+
+      let response: any = JSON.parse(responseText);
+      let fullConversation = [...compactedMessages];
+
+      // Handle pause_turn for web search
+      while (response.stop_reason === 'pause_turn') {
+        const pauseText = response.content
+          .filter((block: any) => block.type === 'text')
+          .map((block: any) => block.text)
+          .join('');
+        if (pauseText) {
+          accumulatedContent += pauseText;
+          setCurrentStreamingMessage(prev => {
+            if (!prev) return null;
+            return { ...prev, content: accumulatedContent };
+          });
+        }
+
+        fullConversation.push({
+          role: 'assistant' as const,
+          content: response.content,
+        });
+
+        responseText = await withRetry(
+          () => invoke<string>('send_chat_message', {
+            model: modelName,
+            messages: fullConversation,
+            system: systemMessage,
+            maxTokens: maxTokens,
+            tools: toolsToSend,
+            apiKey: apiKey || undefined,
+          }),
+          {
+            maxRetries: 3,
+            baseDelay: 1000,
+            onRetry: (attempt, error) => {
+              console.log(`Retry attempt ${attempt} after error:`, error.message);
+            },
+          }
+        ) as string;
+
+        response = JSON.parse(responseText) as any;
+      }
+
+      // Extract final text content
+      const finalContent = response.content
+        .filter((block: any) => block.type === 'text')
+        .map((block: any) => block.text)
+        .join('');
+
+      accumulatedContent += finalContent;
+
+      // Extract citations from web search
+      const citations: { url: string; title: string }[] = [];
+      for (const block of response.content) {
+        if (block.type === 'text' && block.citations) {
+          for (const cite of block.citations) {
+            if (cite.url && !citations.some((c: any) => c.url === cite.url)) {
+              citations.push({ url: cite.url, title: cite.title || cite.url });
+            }
+          }
+        }
+      }
+      if (citations.length > 0) {
+        accumulatedContent += '\n\n**Sources:**\n' +
+          citations.map(c => `- [${c.title}](${c.url})`).join('\n');
+      }
+
+      const finalMessage = {
+        ...assistantMessage,
+        content: accumulatedContent,
+        streaming: false,
+      };
+
+      setMessages(prev => [...prev, finalMessage]);
+      setCurrentStreamingMessage(null);
+      setIsStreaming(false);
+    } catch (err) {
+      console.error('Error sending message:', err);
+      setCurrentStreamingMessage(null);
+      setIsStreaming(false);
+
+      let errorContent = 'Sorry, I encountered an error.';
+      if (err instanceof Error) {
+        const errorMessage = err.message.toLowerCase();
+        if (errorMessage.includes('anthropic_api_key') || errorMessage.includes('not configured') || errorMessage.includes('api key')) {
+          errorContent = 'Authentication failed. Please configure your Anthropic API key in Settings.';
+        } else if (errorMessage.includes('401')) {
+          errorContent = 'Authentication failed. Please check your API key configuration in Settings.';
+        } else if (errorMessage.includes('429')) {
+          errorContent = 'Rate limit exceeded. Please wait a moment and try again.';
+        } else if (errorMessage.includes('500') || errorMessage.includes('502') || errorMessage.includes('503')) {
+          errorContent = 'The API is experiencing issues. Please try again later.';
+        } else if (errorMessage.includes('fetch') || errorMessage.includes('network') || errorMessage.includes('connection')) {
+          errorContent = 'Network error. Please check your internet connection.';
+        } else {
+          errorContent = `Error: ${err.message}`;
+        }
+      }
+
+      const errorMessage: ChatMessage = {
+        id: generateId(),
+        role: 'assistant',
+        content: errorContent,
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, errorMessage]);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -166,6 +468,8 @@ export default function TodayPage({ onTaskClick, onStartChat }: TodayPageProps) 
   useEffect(() => {
     loadTodayData();
   }, []);
+
+  const hasConversation = messages.length > 0 || currentStreamingMessage !== null;
 
   if (loading) {
     return (
@@ -287,126 +591,225 @@ export default function TodayPage({ onTaskClick, onStartChat }: TodayPageProps) 
         </div>
       </div>
 
-      {/* Chat Input Bar */}
-      <div style={{
-        border: '1.5px solid black',
-        borderRadius: '8px',
-        padding: '12px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px',
-        flexShrink: 0,
-        boxShadow: '0px 4px 8px 2px rgba(0,0,0,0.1)',
-      }}>
-        <textarea
-          ref={textareaRef}
-          value={chatInput}
-          onChange={(e) => setChatInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Help me organise my day"
-          rows={1}
-          style={{
-            border: 'none',
-            outline: 'none',
-            resize: 'none',
-            fontSize: '18px',
-            fontFamily: 'Inter, sans-serif',
-            color: '#333',
-            padding: '4px',
-            backgroundColor: 'transparent',
-          }}
-        />
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          gap: '27px',
-        }}>
-          {/* Agent Selector */}
-          <div ref={dropdownRef} style={{ position: 'relative' }}>
+      {/* Collapsible Conversation Panel + Chat Input */}
+      <div style={{ flexShrink: 0 }}>
+        {/* Conversation Panel */}
+        {hasConversation && (
+          <div style={{
+            backgroundColor: '#F2F2F2',
+            border: '1px solid #BDBDBD',
+            borderBottom: 'none',
+            borderRadius: '8px 8px 0 0',
+            overflow: 'hidden',
+          }}>
+            {/* Toggle Header */}
             <button
-              onClick={() => setShowAgentDropdown(!showAgentDropdown)}
+              onClick={() => setConversationOpen(!conversationOpen)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                justifyContent: 'center',
+                width: '100%',
+                padding: '6px',
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: '16px',
-                color: '#333',
-                fontFamily: 'Inter, sans-serif',
-                padding: 0,
+                color: '#828282',
               }}
             >
-              {selectedAgent?.name || 'Select agent'}
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M5 8L10 13L15 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                style={{
+                  transform: conversationOpen ? 'rotate(0deg)' : 'rotate(180deg)',
+                  transition: 'transform 0.2s ease',
+                }}
+              >
+                <path d="M4 10L8 6L12 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
-            {showAgentDropdown && agents.length > 0 && (
-              <div style={{
-                position: 'absolute',
-                bottom: '100%',
-                right: 0,
-                marginBottom: '4px',
-                backgroundColor: 'white',
-                border: '1px solid #bdbdbd',
-                borderRadius: '6px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-                minWidth: '160px',
-                zIndex: 10,
-              }}>
-                {agents.map(agent => (
-                  <button
-                    key={agent.id}
-                    onClick={() => {
-                      setSelectedAgent(agent);
-                      setShowAgentDropdown(false);
-                    }}
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      textAlign: 'left',
-                      padding: '8px 12px',
-                      border: 'none',
-                      background: selectedAgent?.id === agent.id ? '#f2f2f2' : 'none',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      fontFamily: 'Inter, sans-serif',
-                      color: '#333',
-                    }}
-                    onMouseEnter={(e) => { (e.target as HTMLElement).style.backgroundColor = '#f2f2f2'; }}
-                    onMouseLeave={(e) => { (e.target as HTMLElement).style.backgroundColor = selectedAgent?.id === agent.id ? '#f2f2f2' : 'transparent'; }}
-                  >
-                    {agent.name}
-                  </button>
-                ))}
+
+            {/* Messages Area */}
+            {conversationOpen && (
+              <div
+                ref={messagesContainerRef}
+                style={{
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  padding: '0 16px 12px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+              >
+                {messages.map(message => {
+                  const contentText = typeof message.content === 'string'
+                    ? message.content
+                    : Array.isArray(message.content)
+                      ? message.content
+                          .filter((block: any) => block.type === 'text')
+                          .map((block: any) => block.text)
+                          .join('')
+                      : '';
+
+                  return (
+                    <div className="message-content" key={message.id}>
+                      <div className={message.role === 'user' ? 'mcu' : 'mca'}>
+                        {message.role === 'user'
+                          ? contentText
+                          : <ReactMarkdown>{contentText}</ReactMarkdown>}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {currentStreamingMessage && (
+                  <div className="message-content">
+                    <div className="mca">
+                      <ReactMarkdown>
+                        {typeof currentStreamingMessage.content === 'string'
+                          ? currentStreamingMessage.content || ' '
+                          : ' '}
+                      </ReactMarkdown>
+                      {currentStreamingMessage.streaming && (
+                        <div className="streaming-indicator">
+                          <Spinner size="small" />
+                          <span>{selectedAgent?.name || 'Agent'} is thinking...</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
               </div>
             )}
           </div>
+        )}
 
-          {/* Send Button */}
-          <button
-            onClick={handleSendChat}
-            disabled={!chatInput.trim() || !selectedAgent}
+        {/* Chat Input Bar */}
+        <div style={{
+          border: '1.5px solid black',
+          borderRadius: hasConversation ? '0 0 8px 8px' : '8px',
+          padding: '12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          boxShadow: '0px 4px 8px 2px rgba(0,0,0,0.1)',
+        }}>
+          <textarea
+            ref={textareaRef}
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Help me organise my day"
+            rows={1}
+            disabled={isStreaming}
             style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '6px',
-              backgroundColor: chatInput.trim() && selectedAgent ? 'black' : '#bdbdbd',
               border: 'none',
-              cursor: chatInput.trim() && selectedAgent ? 'pointer' : 'default',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
+              outline: 'none',
+              resize: 'none',
+              fontSize: '16px',
+              fontFamily: 'Inter, sans-serif',
+              color: '#333',
+              padding: '4px',
+              backgroundColor: 'transparent',
             }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M6 12L3 21L21 12L3 3L6 12ZM6 12H13" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
+          />
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: '27px',
+          }}>
+            {/* Agent Selector */}
+            <div ref={dropdownRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowAgentDropdown(!showAgentDropdown)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  color: '#333',
+                  fontFamily: 'Inter, sans-serif',
+                  padding: 0,
+                }}
+              >
+                {selectedAgent?.name || 'Select agent'}
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M5 8L10 13L15 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {showAgentDropdown && agents.length > 0 && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  right: 0,
+                  marginBottom: '4px',
+                  backgroundColor: 'white',
+                  border: '1px solid #bdbdbd',
+                  borderRadius: '6px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                  minWidth: '160px',
+                  zIndex: 10,
+                }}>
+                  {agents.map(agent => (
+                    <button
+                      key={agent.id}
+                      onClick={() => {
+                        setSelectedAgent(agent);
+                        setShowAgentDropdown(false);
+                      }}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '8px 12px',
+                        border: 'none',
+                        background: selectedAgent?.id === agent.id ? '#f2f2f2' : 'none',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontFamily: 'Inter, sans-serif',
+                        color: '#333',
+                      }}
+                      onMouseEnter={(e) => { (e.target as HTMLElement).style.backgroundColor = '#f2f2f2'; }}
+                      onMouseLeave={(e) => { (e.target as HTMLElement).style.backgroundColor = selectedAgent?.id === agent.id ? '#f2f2f2' : 'transparent'; }}
+                    >
+                      {agent.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Send Button */}
+            <button
+              onClick={handleSendChat}
+              disabled={!chatInput.trim() || !selectedAgent || isStreaming}
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '6px',
+                backgroundColor: chatInput.trim() && selectedAgent && !isStreaming ? 'black' : '#bdbdbd',
+                border: 'none',
+                cursor: chatInput.trim() && selectedAgent && !isStreaming ? 'pointer' : 'default',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M6 12L3 21L21 12L3 3L6 12ZM6 12H13" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
