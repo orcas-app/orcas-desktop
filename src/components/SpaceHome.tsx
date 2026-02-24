@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Heading, Button, Text, TextInput } from "@primer/react";
-import { getTasksBySpace, getSpaceContext, updateSpaceContext, createTask, getSpaceEvents, getEventsForDate, getSetting, untagEventFromSpace } from "../api";
+import { getTasksBySpace, getSpaceContext, updateSpaceContext, createTask, getSpaceEvents, getEventsForDate, getSetting, untagEventFromSpace, updateTaskStatus } from "../api";
 import type { Space, TaskWithSubTasks, CalendarEvent, EventSpaceAssociation } from "../types";
 import { MDXEditor, headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin, markdownShortcutPlugin } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
@@ -540,23 +540,36 @@ function SpaceHome({
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "white"; }}
                 >
                   {/* Checkbox */}
-                  <div style={{
-                    width: "16px",
-                    height: "16px",
-                    border: "1px solid #bdbdbd",
-                    borderRadius: "4px",
-                    flexShrink: 0,
-                    backgroundColor: task.status === "done" ? "#2f80ed" : "white",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const newStatus = task.status === "done" ? "todo" : "done";
+                      updateTaskStatus(task.id, newStatus).then(() => {
+                        if (selectedSpace) loadTasks(selectedSpace.id);
+                      }).catch((err) => {
+                        console.error("Failed to toggle task status:", err);
+                      });
+                    }}
+                    style={{
+                      width: "16px",
+                      height: "16px",
+                      border: "1px solid #bdbdbd",
+                      borderRadius: "4px",
+                      flexShrink: 0,
+                      backgroundColor: task.status === "done" ? "#2f80ed" : "white",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                      padding: 0,
+                    }}
+                  >
                     {task.status === "done" && (
                       <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
                         <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     )}
-                  </div>
+                  </button>
                   <span style={{
                     fontSize: "16px",
                     overflow: "hidden",
