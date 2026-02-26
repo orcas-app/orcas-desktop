@@ -31,10 +31,39 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentStreamingMessage, setCurrentStreamingMessage] = useState<ChatMessage | null>(null);
-  const [conversationOpen, setConversationOpen] = useState(true);
+  // Chat panel state: 'hidden' | 'collapsed' | 'expanded'
+  //  hidden: no conversation panel shown (chat input not focused)
+  //  collapsed: small panel showing recent messages (chat input focused)
+  //  expanded: full overlay panel (user clicked expand chevron)
+  const [chatPanelState, setChatPanelState] = useState<'hidden' | 'collapsed' | 'expanded'>('hidden');
   const [apiKey, setApiKey] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const chatAreaRef = useRef<HTMLDivElement>(null);
+  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleChatAreaFocus = () => {
+    if (blurTimeoutRef.current) {
+      clearTimeout(blurTimeoutRef.current);
+      blurTimeoutRef.current = null;
+    }
+    if (chatPanelState === 'hidden') {
+      setChatPanelState('collapsed');
+    }
+  };
+
+  const handleChatAreaBlur = (e: React.FocusEvent) => {
+    const chatArea = chatAreaRef.current;
+    const relatedTarget = e.relatedTarget as Node | null;
+    if (chatArea && relatedTarget && chatArea.contains(relatedTarget)) {
+      return;
+    }
+    blurTimeoutRef.current = setTimeout(() => {
+      if (!isStreaming) {
+        setChatPanelState('hidden');
+      }
+    }, 150);
+  };
 
   const generateId = () => Math.random().toString(36).substring(7);
 
@@ -256,7 +285,9 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
     };
 
     setMessages(prev => [...prev, userMessage]);
-    setConversationOpen(true);
+    if (chatPanelState === 'hidden') {
+      setChatPanelState('collapsed');
+    }
     setIsStreaming(true);
 
     const assistantMessage: ChatMessage = {
@@ -513,6 +544,7 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
       padding: '32px',
       gap: '32px',
       backgroundColor: 'white',
+      position: 'relative',
     }}>
       {/* Page Header */}
       <h1 style={{
@@ -591,30 +623,48 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
         </div>
       </div>
 
-      {/* Collapsible Conversation Panel + Chat Input */}
-      <div style={{ flexShrink: 0 }}>
+      {/* Chat Area: Conversation Panel + Input */}
+      <div
+        ref={chatAreaRef}
+        onFocus={handleChatAreaFocus}
+        onBlur={handleChatAreaBlur}
+        style={{ flexShrink: 0, position: 'relative', zIndex: 6 }}
+      >
         {/* Conversation Panel */}
-        {hasConversation && (
+        {hasConversation && chatPanelState !== 'hidden' && (
           <div style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: '100%',
+            ...(chatPanelState === 'expanded'
+              ? { height: 'calc(100vh - 200px)', maxHeight: '600px' }
+              : { maxHeight: '194px' }),
             backgroundColor: '#F2F2F2',
             border: '1px solid #BDBDBD',
             borderBottom: 'none',
             borderRadius: '8px 8px 0 0',
+            display: 'flex',
+            flexDirection: 'column',
             overflow: 'hidden',
           }}>
-            {/* Toggle Header */}
+            {/* Expand/collapse chevron */}
             <button
-              onClick={() => setConversationOpen(!conversationOpen)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setChatPanelState(chatPanelState === 'expanded' ? 'collapsed' : 'expanded');
+              }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 width: '100%',
-                padding: '6px',
+                padding: '4px',
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
                 color: '#828282',
+                flexShrink: 0,
               }}
             >
               <svg
@@ -623,7 +673,7 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
                 viewBox="0 0 16 16"
                 fill="none"
                 style={{
-                  transform: conversationOpen ? 'rotate(0deg)' : 'rotate(180deg)',
+                  transform: chatPanelState === 'expanded' ? 'rotate(180deg)' : 'rotate(0deg)',
                   transition: 'transform 0.2s ease',
                 }}
               >
@@ -632,72 +682,107 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
             </button>
 
             {/* Messages Area */}
-            {conversationOpen && (
-              <div
-                ref={messagesContainerRef}
-                style={{
-                  maxHeight: '300px',
-                  overflowY: 'auto',
-                  padding: '0 16px 12px 16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                }}
-              >
-                {messages.map(message => {
-                  const contentText = typeof message.content === 'string'
+            <div
+              ref={messagesContainerRef}
+              style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '0 24px 30px 24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+                justifyContent: 'flex-end',
+              }}
+            >
+              {messages.map(message => {
+                const contentText = typeof message.content === 'string'
+                  ? message.content
+                  : Array.isArray(message.content)
                     ? message.content
-                    : Array.isArray(message.content)
-                      ? message.content
-                          .filter((block: any) => block.type === 'text')
-                          .map((block: any) => block.text)
-                          .join('')
-                      : '';
+                        .filter((block: any) => block.type === 'text')
+                        .map((block: any) => block.text)
+                        .join('')
+                    : '';
 
-                  return (
-                    <div className="message-content" key={message.id}>
-                      <div className={message.role === 'user' ? 'mcu' : 'mca'}>
-                        {message.role === 'user'
-                          ? contentText
-                          : <ReactMarkdown>{contentText}</ReactMarkdown>}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {currentStreamingMessage && (
-                  <div className="message-content">
-                    <div className="mca">
-                      <ReactMarkdown>
-                        {typeof currentStreamingMessage.content === 'string'
-                          ? currentStreamingMessage.content || ' '
-                          : ' '}
-                      </ReactMarkdown>
-                      {currentStreamingMessage.streaming && (
-                        <div className="streaming-indicator">
-                          <Spinner size="small" />
-                          <span>{selectedAgent?.name || 'Agent'} is thinking...</span>
-                        </div>
-                      )}
+                return message.role === 'user' ? (
+                  <div
+                    key={message.id}
+                    style={{
+                      backgroundColor: '#E0E0E0',
+                      borderRadius: '5px',
+                      padding: '8px',
+                      width: '100%',
+                    }}
+                  >
+                    <p style={{
+                      margin: 0,
+                      fontSize: '16px',
+                      fontFamily: 'Inter, sans-serif',
+                      color: '#333',
+                      lineHeight: 'normal',
+                    }}>
+                      {contentText}
+                    </p>
+                  </div>
+                ) : (
+                  <div
+                    key={message.id}
+                    className="today-agent-message"
+                    style={{
+                      padding: '0 8px',
+                      width: '100%',
+                    }}
+                  >
+                    <div style={{
+                      fontSize: '16px',
+                      fontFamily: 'Inter, sans-serif',
+                      color: '#828282',
+                      lineHeight: 'normal',
+                    }}>
+                      <ReactMarkdown>{contentText}</ReactMarkdown>
                     </div>
                   </div>
-                )}
+                );
+              })}
 
-                <div ref={messagesEndRef} />
-              </div>
-            )}
+              {currentStreamingMessage && (
+                <div style={{ padding: '0 8px', width: '100%' }}>
+                  <div style={{
+                    fontSize: '16px',
+                    fontFamily: 'Inter, sans-serif',
+                    color: '#828282',
+                    lineHeight: 'normal',
+                  }}>
+                    <ReactMarkdown>
+                      {typeof currentStreamingMessage.content === 'string'
+                        ? currentStreamingMessage.content || ' '
+                        : ' '}
+                    </ReactMarkdown>
+                    {currentStreamingMessage.streaming && (
+                      <div className="streaming-indicator">
+                        <Spinner size="small" />
+                        <span>{selectedAgent?.name || 'Agent'} is thinking...</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
           </div>
         )}
 
         {/* Chat Input Bar */}
         <div style={{
           border: '1.5px solid black',
-          borderRadius: hasConversation ? '0 0 8px 8px' : '8px',
+          borderRadius: (hasConversation && chatPanelState !== 'hidden') ? '0 0 8px 8px' : '8px',
           padding: '12px',
           display: 'flex',
           flexDirection: 'column',
           gap: '8px',
           boxShadow: '0px 4px 8px 2px rgba(0,0,0,0.1)',
+          backgroundColor: 'white',
         }}>
           <textarea
             ref={textareaRef}

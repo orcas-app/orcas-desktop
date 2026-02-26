@@ -558,6 +558,14 @@ h3 {
     font-size: 13px;
 }
 
+.today-agent-message p {
+    margin: 0 0 8px 0;
+}
+
+.today-agent-message p:last-child {
+    margin-bottom: 0;
+}
+
 .chat-empty-state {
     display: flex;
     flex-direction: column;
