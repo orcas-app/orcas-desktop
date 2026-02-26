@@ -406,25 +406,6 @@ export async function getLastUsedAgentForTask(
   return result.length > 0 ? result[0] : null;
 }
 
-// Agent Notes MCP Server operations
-export async function startMCPServer(): Promise<string> {
-  try {
-    return await invoke<string>("start_mcp_server");
-  } catch (error) {
-    console.error("Failed to start MCP server:", error);
-    throw error;
-  }
-}
-
-export async function stopMCPServer(): Promise<string> {
-  try {
-    return await invoke<string>("stop_mcp_server");
-  } catch (error) {
-    console.error("Failed to stop MCP server:", error);
-    throw error;
-  }
-}
-
 export async function updateTaskNotesPath(taskId: number): Promise<string> {
   try {
     const notesPath = await invoke<string>("update_task_notes_path", {

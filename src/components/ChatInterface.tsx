@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import type { Agent, ChatMessage } from "../types";
-import { recordTaskAgentSession, startMCPServer, stopMCPServer, getSetting, getAllAgents, getSpaceContext, checkModelSupportsTools } from "../api";
+import { recordTaskAgentSession, getSetting, getAllAgents, getSpaceContext, checkModelSupportsTools } from "../api";
 import { withRetry } from "../utils/retry";
 import { compactMessages } from "../utils/tokenEstimation";
 
@@ -26,7 +26,7 @@ function ChatInterface({ agent, taskId, spaceId, onBack }: ChatInterfaceProps) {
   const [expandedMessages, setExpandedMessages] = useState<
     Record<string, boolean>
   >({});
-  const [mcpServerRunning, setMcpServerRunning] = useState(false);
+
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
   const [spaceContext, setSpaceContext] = useState<string>("");
@@ -58,17 +58,9 @@ function ChatInterface({ agent, taskId, spaceId, onBack }: ChatInterfaceProps) {
   useEffect(() => {
     loadAgentPrompt();
     loadPersistedMessages();
-    initializeMCPServer();
     loadApiKey();
     loadAgents();
     loadSpaceContext();
-
-    // Cleanup: stop MCP server when component unmounts
-    return () => {
-      if (mcpServerRunning) {
-        stopMCPServer().catch(console.error);
-      }
-    };
   }, [agent, taskId]);
 
   const loadApiKey = async () => {
@@ -140,17 +132,6 @@ function ChatInterface({ agent, taskId, spaceId, onBack }: ChatInterfaceProps) {
     } catch (error) {
       console.error("Failed to load agent prompt:", error);
       setAgentPrompt("You are a helpful AI assistant.");
-    }
-  };
-
-  const initializeMCPServer = async () => {
-    try {
-      await startMCPServer();
-      setMcpServerRunning(true);
-      console.log("MCP server started successfully");
-    } catch (error) {
-      console.error("Failed to start MCP server:", error);
-      setMcpServerRunning(false);
     }
   };
 
@@ -500,10 +481,10 @@ The space context is shared across all tasks in the space.`;
       const maxTokens = getMaxTokensForModel(modelName);
 
       // Check if the model supports tool use before passing tools
-      const modelToolSupport = mcpServerRunning ? await checkModelSupportsTools(modelName) : false;
+      const modelToolSupport = await checkModelSupportsTools(modelName);
       let toolsToSend: any[] | undefined = modelToolSupport ? [...mcpTools] : undefined;
 
-      if (mcpServerRunning && !modelToolSupport) {
+      if (!modelToolSupport) {
         console.warn(`Model '${modelName}' does not support tool use. Tools will not be sent.`);
       }
 

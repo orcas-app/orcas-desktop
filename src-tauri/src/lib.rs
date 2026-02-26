@@ -1,12 +1,8 @@
 mod database;
 
 use serde::{Deserialize, Serialize};
-use std::process::Stdio;
-use std::sync::{Arc, LazyLock};
 use tauri::{Emitter, Manager};
 use tauri_plugin_sql::{Migration, MigrationKind};
-use tokio::process::Command;
-use tokio::sync::Mutex;
 
 mod chat;
 mod settings;
@@ -31,49 +27,6 @@ struct PlanningCompleteEvent {
     message: String,
     subtasks_created: Option<i32>,
     error: Option<String>,
-}
-
-// Global state to track MCP server process
-static MCP_SERVER_PROCESS: LazyLock<Arc<Mutex<Option<tokio::process::Child>>>> =
-    LazyLock::new(|| Arc::new(Mutex::new(None)));
-
-#[tauri::command]
-async fn start_mcp_server() -> Result<String, String> {
-    let process_guard = MCP_SERVER_PROCESS.clone();
-    let mut guard = process_guard.lock().await;
-
-    // If server is already running, return success
-    if guard.is_some() {
-        return Ok("MCP server is already running".to_string());
-    }
-
-    // Start the MCP server process from the current working directory
-    let child = Command::new("npx")
-        .args(["tsx", "src/mcp-servers/agent-notes-server.ts"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Failed to start MCP server: {}", e))?;
-
-    *guard = Some(child);
-    Ok("MCP server started successfully".to_string())
-}
-
-#[tauri::command]
-async fn stop_mcp_server() -> Result<String, String> {
-    let process_guard = MCP_SERVER_PROCESS.clone();
-    let mut guard = process_guard.lock().await;
-
-    if let Some(mut child) = guard.take() {
-        child
-            .kill()
-            .await
-            .map_err(|e| format!("Failed to kill MCP server: {}", e))?;
-        Ok("MCP server stopped successfully".to_string())
-    } else {
-        Ok("MCP server was not running".to_string())
-    }
 }
 
 #[tauri::command]
@@ -581,8 +534,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            start_mcp_server,
-            stop_mcp_server,
             chat::send_chat_message,
             settings::get_setting,
             settings::set_setting,
