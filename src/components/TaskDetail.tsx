@@ -230,6 +230,8 @@ function TaskDetail({ task, spaceName, onBack }: TaskDetailProps) {
         taskId: task.id,
         content: content,
       });
+      // Notify other components (e.g. ChatInterface) that task notes changed
+      await emit("task-notes-changed", { taskId: task.id });
     } catch (error) {
       console.error("Failed to save document:", error);
     }

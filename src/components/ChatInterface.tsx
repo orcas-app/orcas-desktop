@@ -3,7 +3,7 @@ import { Textarea, Button, Spinner, ActionMenu, ActionList } from "@primer/react
 import { PaperAirplaneIcon, ChevronDownIcon } from "@primer/octicons-react";
 import ReactMarkdown from "react-markdown";
 import { invoke } from "@tauri-apps/api/core";
-import { emit } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import type { Agent, ChatMessage } from "../types";
 import { recordTaskAgentSession, getSetting, getAllAgents, getSpaceContext, checkModelSupportsTools, getTasksBySpace, readAgentNotes, getCalendarList, getEventsForDate } from "../api";
 import { withRetry } from "../utils/retry";
@@ -35,6 +35,12 @@ function ChatInterface({ agent, taskId, spaceId, onBack }: ChatInterfaceProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Track whether task notes were changed by the user between agent turns.
+  // Inspired by Claude Code's "file modified by user" system reminder pattern.
+  const [taskNotesChangedSinceLastRead, setTaskNotesChangedSinceLastRead] = useState(false);
+  // Track content the agent last read via read_task_notes, so we can tell it what changed
+  const lastAgentReadContentRef = useRef<string | null>(null);
+
   // Response length constants
   const MAX_RESPONSE_LENGTH = 10000;
   const MAX_DISPLAY_LENGTH = 5000;
@@ -62,6 +68,18 @@ function ChatInterface({ agent, taskId, spaceId, onBack }: ChatInterfaceProps) {
     loadAgents();
     loadSpaceContext();
   }, [agent, taskId]);
+
+  // Listen for task notes changes made by the user (emitted from TaskDetail)
+  useEffect(() => {
+    const unlisten = listen<{ taskId: number }>("task-notes-changed", (event) => {
+      if (event.payload.taskId === taskId && !isStreaming) {
+        setTaskNotesChangedSinceLastRead(true);
+      }
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [taskId, isStreaming]);
 
   const loadApiKey = async () => {
     try {
@@ -156,6 +174,11 @@ function ChatInterface({ agent, taskId, spaceId, onBack }: ChatInterfaceProps) {
           const readTaskId = task_id || taskId;
           // Read from database using Tauri command
           const content = await invoke<string>("read_task_notes", { taskId: readTaskId });
+          // Track last content the agent read for this task (for change detection)
+          if (readTaskId === taskId) {
+            lastAgentReadContentRef.current = content || "";
+            setTaskNotesChangedSinceLastRead(false);
+          }
           return {
             content: [
               {
@@ -704,10 +727,20 @@ function ChatInterface({ agent, taskId, spaceId, onBack }: ChatInterfaceProps) {
         })
         .filter((msg) => msg.content.trim().length > 0);
 
-      // Add the new user message (use trimmedInput directly since it's guaranteed to be a string)
+      // If the task document was modified by the user since the agent last read it,
+      // prepend a change notification to the user's message. This mirrors Claude Code's
+      // "File modified by user or linter" system reminder pattern — the agent is told
+      // "the document changed" so it can re-read before making stale assumptions.
+      let userMessageContent = trimmedInput;
+      if (taskNotesChangedSinceLastRead && lastAgentReadContentRef.current !== null) {
+        userMessageContent = `[System notice: The task document has been modified by the user since you last read it. Use read_task_notes to get the current content before making any edits or assumptions about the document.]\n\n${trimmedInput}`;
+        setTaskNotesChangedSinceLastRead(false);
+      }
+
+      // Add the new user message
       conversationMessages.push({
         role: "user",
-        content: trimmedInput,
+        content: userMessageContent,
       });
 
       // Compact conversation history to stay within token budget.
@@ -742,7 +775,7 @@ You are currently working on Task ID: ${taskId} in Space ID: ${spaceId}. You hav
 - list_agents: List all available agents with their capabilities
 
 Use these tools to:
-- Check for existing notes at the start of conversations to maintain continuity
+- Check for existing notes at the start of conversations and after receiving a document change notification to maintain continuity
 - Save important insights, decisions, or findings to task notes
 - Review task details and subtask progress
 - Understand the broader space context and other tasks in the space
