@@ -104,6 +104,133 @@ Space (container, formerly "Project")
 ### Database Tables
 `spaces`, `tasks`, `subtasks`, `agents`, `task_agent_sessions`, `agent_notes`, `task_notes`, `settings`, `agent_edit_locks`, `event_space_associations`
 
+## Key Flows
+
+### Chat Message Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant CI as ChatInterface
+    participant API as api.ts (invoke)
+    participant Chat as chat.rs
+    participant Prov as providers/mod.rs
+    participant LLM as AI Provider
+
+    U->>CI: Type message & send
+    CI->>CI: Save to localStorage
+    CI->>API: sendChatMessage(model, messages, tools)
+    API->>Chat: send_chat_message
+    Chat->>Prov: resolve_model_name(model)
+    Prov-->>Chat: resolved snapshot ID
+    Chat->>Prov: load_provider_config()
+    Prov-->>Chat: endpoint + headers
+    Chat->>LLM: POST /v1/messages
+    LLM-->>Chat: response JSON
+    Chat-->>API: raw response text
+    API-->>CI: response
+    CI->>CI: Parse content blocks (text / tool_use)
+    CI->>CI: Update localStorage & render
+```
+
+### Task Planning Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend (PlanCard)
+    participant Lib as lib.rs
+    participant PA as PlanningAgent
+    participant LLM as AI Provider
+    participant DB as SQLite
+
+    U->>FE: Click "Plan Task"
+    FE->>Lib: start_task_planning(task_id)
+    Lib->>Lib: tokio::spawn (background)
+    Lib-->>FE: Ok (immediate return)
+    Lib->>PA: PlanningAgent::new()
+    PA->>DB: Load planning agent + available agents
+    PA->>PA: build_system_prompt()
+
+    loop Tool-use loop (max 20 iterations)
+        PA->>LLM: send_chat_message (with create_subtask tool)
+        LLM-->>PA: response (stop_reason)
+        alt stop_reason = "tool_use"
+            PA->>DB: INSERT subtask
+            PA-->>FE: emit("task-planning-progress")
+        else stop_reason = "end_turn"
+            PA->>PA: Break loop
+        end
+    end
+
+    PA-->>FE: emit("task-planning-complete")
+    FE->>FE: Refresh subtask list
+```
+
+### Document Edit Lock Flow
+
+```mermaid
+stateDiagram-v2
+    [*] --> Unlocked
+
+    Unlocked --> LockedByAgent: Agent acquires lock\n(saves original content)
+    Unlocked --> LockedByUser: User acquires lock
+
+    LockedByAgent --> ForReview: Agent releases lock\n(edits saved to task_notes)
+    LockedByUser --> Unlocked: User releases lock
+
+    ForReview --> Unlocked: User approves changes
+    ForReview --> Unlocked: User rejects changes\n(reverts to original)
+
+    LockedByAgent --> Unlocked: Stale lock cleanup\n(5-min timeout)
+    LockedByUser --> Unlocked: Stale lock cleanup\n(5-min timeout)
+```
+
+### Application Startup
+
+```mermaid
+flowchart TD
+    A[main.rs: run] --> B[lib.rs: setup]
+    B --> C[Register Tauri plugins]
+    C --> C1[sql, fs, os, updater,\nopener, process]
+    B --> D[Run 22 SQLite migrations]
+    B --> E[Init Rust DB pool\nsettings::init_db_pool]
+    B --> F[Cleanup stale locks\non startup - 5min timeout]
+    B --> G[Spawn background task]
+    G --> H[Every 60s: cleanup\nstale locks]
+    D --> I[App ready]
+    E --> I
+    F --> I
+    I --> J[Frontend loads]
+    J --> K[App.tsx mounts]
+    K --> L[Fetch spaces from DB]
+    K --> M[Render sidebar + routes]
+```
+
+### Data Flow Architecture
+
+```mermaid
+flowchart LR
+    subgraph Frontend
+        A[React Components] -->|invoke| B[api.ts]
+        A -->|direct SQL| C[tauri-plugin-sql]
+        A -->|emit/listen| D[Tauri Events]
+    end
+
+    subgraph Backend
+        B -->|Tauri commands| E[lib.rs / chat.rs / etc.]
+        E -->|sqlx pool| F[(SQLite DB)]
+        C -->|plugin queries| F
+        E -->|emit| D
+        E -->|HTTP| G[AI Provider API]
+    end
+
+    subgraph MCP
+        H[agent-notes-server.ts] -->|sqlite3| F
+        A -->|stdio transport| H
+    end
+```
+
 ## State Management
 
 - Component-level state via React hooks (useState/useEffect)
