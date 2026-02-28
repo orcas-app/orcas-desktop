@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import type { Agent, ChatMessage } from "../types";
-import { recordTaskAgentSession, getSetting, getAllAgents, getSpaceContext, checkModelSupportsTools } from "../api";
+import { recordTaskAgentSession, getSetting, getAllAgents, getSpaceContext, checkModelSupportsTools, getTasksBySpace, readAgentNotes, getCalendarList, getEventsForDate } from "../api";
 import { withRetry } from "../utils/retry";
 import { compactMessages } from "../utils/tokenEstimation";
 
@@ -146,11 +146,9 @@ function ChatInterface({ agent, taskId, spaceId, onBack }: ChatInterfaceProps) {
     return limits[modelName] || 8192;
   };
 
-  // Handle MCP tool calls by communicating with the MCP server process
-  const executeMCPTool = async (toolName: string, args: any) => {
+  // Execute agent tool calls via Tauri commands and frontend API
+  const executeAgentTool = async (toolName: string, args: any) => {
     try {
-      // For now, we'll use the existing API functions to interact with notes
-      // In a full implementation, this would communicate directly with the MCP server process
       switch (toolName) {
         case "read_task_notes":
           const { task_id } = args;
@@ -244,6 +242,195 @@ function ChatInterface({ agent, taskId, spaceId, onBack }: ChatInterfaceProps) {
             );
           }
 
+        case "get_task_details": {
+          const detailTaskId = args.task_id || taskId;
+          try {
+            // Get all tasks in the space to find this task and its space info
+            const allTasks = await getTasksBySpace(spaceId);
+            const task = allTasks.find(t => t.id === detailTaskId);
+
+            if (!task) {
+              return {
+                content: [{ type: "text", text: `Task ${detailTaskId} not found in the current space.` }],
+              };
+            }
+
+            // Get task notes
+            const notes = await readAgentNotes(detailTaskId);
+
+            // Get space info
+            const { getAllSpaces } = await import("../api");
+            const spaces = await getAllSpaces();
+            const space = spaces.find(s => s.id === task.space_id);
+
+            const result = {
+              task: {
+                id: task.id,
+                title: task.title,
+                description: task.description || null,
+                status: task.status,
+                priority: task.priority,
+                due_date: task.due_date || null,
+                scheduled_date: task.scheduled_date || null,
+                created_at: task.created_at,
+                updated_at: task.updated_at,
+              },
+              space: space ? { id: space.id, title: space.title, description: space.description || null } : null,
+              subtasks: task.subtasks.map(st => ({
+                id: st.id,
+                title: st.title,
+                description: st.description || null,
+                completed: st.completed,
+                agent_id: st.agent_id || null,
+              })),
+              notes: notes || null,
+            };
+
+            return {
+              content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+            };
+          } catch (error) {
+            console.error("Error in get_task_details:", error);
+            throw new Error(
+              `Failed to get task details: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
+          }
+        }
+
+        case "list_space_tasks": {
+          const listSpaceId = args.space_id || spaceId;
+          try {
+            let tasks = await getTasksBySpace(listSpaceId);
+
+            // Apply status filter if provided
+            if (args.status) {
+              tasks = tasks.filter(t => t.status === args.status);
+            }
+
+            // Get space info
+            const { getAllSpaces } = await import("../api");
+            const spaces = await getAllSpaces();
+            const space = spaces.find(s => s.id === listSpaceId);
+
+            const result = {
+              space: space ? { id: space.id, title: space.title } : null,
+              tasks: tasks.map(t => ({
+                id: t.id,
+                title: t.title,
+                description: t.description || null,
+                status: t.status,
+                priority: t.priority,
+                due_date: t.due_date || null,
+                scheduled_date: t.scheduled_date || null,
+                subtask_count: t.subtasks.length,
+                subtasks_completed: t.subtasks.filter(st => st.completed).length,
+              })),
+            };
+
+            return {
+              content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+            };
+          } catch (error) {
+            console.error("Error in list_space_tasks:", error);
+            throw new Error(
+              `Failed to list tasks: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
+          }
+        }
+
+        case "read_space_context": {
+          const readCtxSpaceId = args.space_id || spaceId;
+          try {
+            const context = await getSpaceContext(readCtxSpaceId);
+            return {
+              content: [{
+                type: "text",
+                text: context && context.length > 0
+                  ? context
+                  : `No space context has been set for space ${readCtxSpaceId}.`,
+              }],
+            };
+          } catch (error) {
+            console.error("Error in read_space_context:", error);
+            throw new Error(
+              `Failed to read space context: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
+          }
+        }
+
+        case "get_calendar_events": {
+          const { date: eventDate } = args;
+          try {
+            // Get user's selected calendars from localStorage
+            const savedCalendarIds = localStorage.getItem("selected_calendar_ids");
+            let calendarIds: string[] = [];
+            if (savedCalendarIds) {
+              calendarIds = JSON.parse(savedCalendarIds);
+            } else {
+              // Fall back to all calendars
+              const calendars = await getCalendarList();
+              calendarIds = calendars.map(c => c.id);
+            }
+
+            if (calendarIds.length === 0) {
+              return {
+                content: [{ type: "text", text: "No calendars configured. The user needs to select calendars in Settings." }],
+              };
+            }
+
+            const events = await getEventsForDate(calendarIds, eventDate);
+
+            const result = events.map(e => ({
+              title: e.title,
+              start_date: e.start_date,
+              end_date: e.end_date,
+              is_all_day: e.is_all_day,
+              location: e.location || null,
+              notes: e.notes || null,
+              attendees: e.attendees,
+            }));
+
+            return {
+              content: [{
+                type: "text",
+                text: result.length > 0
+                  ? JSON.stringify(result, null, 2)
+                  : `No calendar events found for ${eventDate}.`,
+              }],
+            };
+          } catch (error) {
+            console.error("Error in get_calendar_events:", error);
+            // Calendar may not be authorized on this platform
+            return {
+              content: [{ type: "text", text: `Calendar access unavailable: ${error instanceof Error ? error.message : "Unknown error"}` }],
+            };
+          }
+        }
+
+        case "list_agents": {
+          try {
+            const agents = await getAllAgents();
+            const userAgents = agents.filter(a => !a.system_role);
+
+            const result = userAgents.map(a => ({
+              id: a.id,
+              name: a.name,
+              model: a.model_name,
+              description: a.agent_prompt,
+              web_search_enabled: a.web_search_enabled,
+            }));
+
+            return {
+              content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+            };
+          } catch (error) {
+            console.error("Error in list_agents:", error);
+            throw new Error(
+              `Failed to list agents: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
+          }
+        }
+
         default:
           throw new Error(`Unknown tool: ${toolName}`);
       }
@@ -259,8 +446,8 @@ function ChatInterface({ agent, taskId, spaceId, onBack }: ChatInterfaceProps) {
     }
   };
 
-  // Define MCP tools for Anthropic API
-  const mcpTools = [
+  // Define agent tools for Anthropic API tool use
+  const agentTools = [
     {
       name: "read_task_notes",
       description: "Read the Agent_Notes.md file for a specific task",
@@ -336,6 +523,81 @@ function ChatInterface({ agent, taskId, spaceId, onBack }: ChatInterfaceProps) {
           },
         },
         required: ["space_id", "content"],
+      },
+    },
+    {
+      name: "get_task_details",
+      description:
+        "Get full details of a task including its properties, subtasks, notes, and parent space information.",
+      input_schema: {
+        type: "object",
+        properties: {
+          task_id: {
+            type: "number",
+            description: "The ID of the task to get details for. Defaults to the current task.",
+          },
+        },
+        required: [],
+      },
+    },
+    {
+      name: "list_space_tasks",
+      description:
+        "List all tasks in a space with their subtasks. Optionally filter by status.",
+      input_schema: {
+        type: "object",
+        properties: {
+          space_id: {
+            type: "number",
+            description: "The ID of the space. Defaults to the current space.",
+          },
+          status: {
+            type: "string",
+            enum: ["todo", "in_progress", "for_review", "done"],
+            description: "Optional status filter to only return tasks with this status.",
+          },
+        },
+        required: [],
+      },
+    },
+    {
+      name: "read_space_context",
+      description:
+        "Read the shared space context markdown. Contains architectural decisions, milestones, and space-wide context shared across all tasks.",
+      input_schema: {
+        type: "object",
+        properties: {
+          space_id: {
+            type: "number",
+            description: "The ID of the space. Defaults to the current space.",
+          },
+        },
+        required: [],
+      },
+    },
+    {
+      name: "get_calendar_events",
+      description:
+        "Get calendar events for a specific date. Returns event titles, times, locations, and attendees from the user's configured calendars.",
+      input_schema: {
+        type: "object",
+        properties: {
+          date: {
+            type: "string",
+            description: "The date to get events for in YYYY-MM-DD format.",
+          },
+        },
+        required: ["date"],
+      },
+    },
+    {
+      name: "list_agents",
+      description:
+        "List all available agents with their names, models, and descriptions.",
+      input_schema: {
+        type: "object",
+        properties: {},
+        required: [],
       },
     },
   ];
@@ -460,21 +722,32 @@ function ChatInterface({ agent, taskId, spaceId, onBack }: ChatInterfaceProps) {
 
       const enhancedSystemMessage = `${agentPrompt || `You are ${agent.name}, a helpful AI assistant.`}${spaceContextSection}
 
-You are currently working on Task ID: ${taskId}. You have access to note-taking tools that allow you to:
-1. Read notes from previous sessions for this task
-2. Write or append new insights, findings, or progress to task notes
-3. Check if notes already exist for a task
-4. Update the shared space context with important insights
+You are currently working on Task ID: ${taskId} in Space ID: ${spaceId}. You have access to the following tools:
 
-These tools help you maintain context and continuity across conversations. Use them to:
-- Check for existing notes at the start of conversations
-- Save important insights, decisions, or findings
-- Track progress and next steps
-- Maintain continuity across different chat sessions
-- Update the space context when you make significant architectural decisions or complete major milestones
+**Notes & Context:**
+- read_task_notes: Read notes from previous sessions for a task
+- write_task_notes: Write or append new insights, findings, or progress to task notes
+- check_task_notes_exists: Check if notes already exist for a task
+- read_space_context: Read the shared space context (architectural decisions, milestones)
+- update_space_context: Update the shared space context with important insights
 
-The notes are stored in Markdown format and are task-specific.
-The space context is shared across all tasks in the space.`;
+**Tasks & Spaces:**
+- get_task_details: Get full details of a task including subtasks, notes, and space info
+- list_space_tasks: List all tasks in a space with subtask progress, optionally filtered by status
+
+**Calendar & Scheduling:**
+- get_calendar_events: Get the user's calendar events for a specific date
+
+**Agents:**
+- list_agents: List all available agents with their capabilities
+
+Use these tools to:
+- Check for existing notes at the start of conversations to maintain continuity
+- Save important insights, decisions, or findings to task notes
+- Review task details and subtask progress
+- Understand the broader space context and other tasks in the space
+- Check the user's calendar to understand their schedule
+- Update the space context when you make significant decisions or complete major milestones`;
 
       // Get response from Claude API via Tauri backend
       const modelName = agent.model_name || "claude-sonnet-4-5";
@@ -482,7 +755,7 @@ The space context is shared across all tasks in the space.`;
 
       // Check if the model supports tool use before passing tools
       const modelToolSupport = await checkModelSupportsTools(modelName);
-      let toolsToSend: any[] | undefined = modelToolSupport ? [...mcpTools] : undefined;
+      let toolsToSend: any[] | undefined = modelToolSupport ? [...agentTools] : undefined;
 
       if (!modelToolSupport) {
         console.warn(`Model '${modelName}' does not support tool use. Tools will not be sent.`);
@@ -604,7 +877,7 @@ The space context is shared across all tasks in the space.`;
           });
 
           try {
-            const result = await executeMCPTool(toolCall.name, toolCall.input);
+            const result = await executeAgentTool(toolCall.name, toolCall.input);
             const resultText = result.content.map((c: any) => c.text).join("\n");
 
             toolResults.push({
