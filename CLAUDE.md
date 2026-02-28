@@ -61,7 +61,6 @@ orcas-desktop/
 │       ├── calendar.rs         # macOS EventKit integration
 │       └── providers/
 │           └── mod.rs          # Provider trait, Anthropic + LiteLLM configs
-├── mcp-agent-notes/            # MCP server package
 ├── docs/                       # Documentation
 │   ├── USER_FLOWS.md           # Visual workflow diagrams (best overview)
 │   ├── README_MCP.md           # MCP setup and tools
