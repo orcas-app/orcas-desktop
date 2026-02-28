@@ -146,11 +146,9 @@ function ChatInterface({ agent, taskId, spaceId, onBack }: ChatInterfaceProps) {
     return limits[modelName] || 8192;
   };
 
-  // Handle MCP tool calls by communicating with the MCP server process
-  const executeMCPTool = async (toolName: string, args: any) => {
+  // Execute agent tool calls via Tauri commands and frontend API
+  const executeAgentTool = async (toolName: string, args: any) => {
     try {
-      // For now, we'll use the existing API functions to interact with notes
-      // In a full implementation, this would communicate directly with the MCP server process
       switch (toolName) {
         case "read_task_notes":
           const { task_id } = args;
@@ -448,8 +446,8 @@ function ChatInterface({ agent, taskId, spaceId, onBack }: ChatInterfaceProps) {
     }
   };
 
-  // Define MCP tools for Anthropic API
-  const mcpTools = [
+  // Define agent tools for Anthropic API tool use
+  const agentTools = [
     {
       name: "read_task_notes",
       description: "Read the Agent_Notes.md file for a specific task",
@@ -757,7 +755,7 @@ Use these tools to:
 
       // Check if the model supports tool use before passing tools
       const modelToolSupport = await checkModelSupportsTools(modelName);
-      let toolsToSend: any[] | undefined = modelToolSupport ? [...mcpTools] : undefined;
+      let toolsToSend: any[] | undefined = modelToolSupport ? [...agentTools] : undefined;
 
       if (!modelToolSupport) {
         console.warn(`Model '${modelName}' does not support tool use. Tools will not be sent.`);
@@ -879,7 +877,7 @@ Use these tools to:
           });
 
           try {
-            const result = await executeMCPTool(toolCall.name, toolCall.input);
+            const result = await executeAgentTool(toolCall.name, toolCall.input);
             const resultText = result.content.map((c: any) => c.text).join("\n");
 
             toolResults.push({
