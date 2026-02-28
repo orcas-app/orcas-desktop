@@ -8,6 +8,7 @@ import type { CalendarEvent, Task, Space, Agent, EventSpaceTagWithSpace, ChatMes
 import { getEventsForDate, getTasksScheduledForDate, getRecentlyEditedTasks, getAllSpaces, getEventSpaceTags, tagEventToSpace, untagEventFromSpace, getAllAgents, getSetting } from '../api';
 import { withRetry } from '../utils/retry';
 import { compactMessages } from '../utils/tokenEstimation';
+import { extractMeetingLink, formatAttendees } from '../utils/videoConferencing';
 
 interface TodayPageProps {
   onTaskClick?: (taskId: number) => void;
@@ -250,13 +251,38 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
   const buildAgendaContext = (): string => {
     const parts: string[] = [];
 
+    // Current time so the agent knows what's upcoming vs. past
+    const now = new Date();
+    parts.push(`Current time: ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} on ${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`);
+
     if (events.length > 0) {
-      parts.push('## Today\'s Calendar Events');
+      parts.push('\n## Today\'s Calendar Events');
       for (const event of events) {
         const start = new Date(event.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const end = new Date(event.end_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        let line = `- ${event.title} (${event.is_all_day ? 'All day' : `${start} - ${end}`})`;
-        if (event.location) line += ` at ${event.location}`;
+        let line = `- **${event.title}** (${event.is_all_day ? 'All day' : `${start} - ${end}`})`;
+        if (event.location) line += `\n  Location: ${event.location}`;
+
+        // Attendees
+        if (event.attendees && event.attendees.length > 0) {
+          const { displayText } = formatAttendees(event.attendees, 5);
+          if (displayText) {
+            line += `\n  Attendees: ${displayText}`;
+          }
+        }
+
+        // Meeting link
+        const meetingLink = extractMeetingLink(event);
+        if (meetingLink) {
+          line += `\n  Meeting link: ${meetingLink}`;
+        }
+
+        // Space associations
+        const tags = eventSpaceTags[event.id];
+        if (tags && tags.length > 0) {
+          line += `\n  Spaces: ${tags.map(t => t.space_title).join(', ')}`;
+        }
+
         parts.push(line);
       }
     }
@@ -264,7 +290,18 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
     if (tasks.length > 0) {
       parts.push('\n## Today\'s Tasks');
       for (const task of tasks) {
-        parts.push(`- [${task.status}] ${task.title}${task.priority ? ` (${task.priority} priority)` : ''}`);
+        const space = spaces.find(s => s.id === task.space_id);
+        let line = `- [${task.status}] **${task.title}**`;
+        if (space) line += ` (${space.title})`;
+        if (task.priority) line += ` — ${task.priority} priority`;
+        if (task.due_date) line += ` — due ${task.due_date}`;
+        if (task.description) {
+          const desc = task.description.length > 150
+            ? task.description.substring(0, 150) + '...'
+            : task.description;
+          line += `\n  ${desc}`;
+        }
+        parts.push(line);
       }
     }
 
