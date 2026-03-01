@@ -1,9 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Heading, Button, Text, TextInput } from "@primer/react";
+import { PencilIcon } from "@primer/octicons-react";
 import { getTasksBySpace, getSpaceContext, updateSpaceContext, createTask, getSpaceEvents, getEventsForDate, getSetting, untagEventFromSpace, updateTaskStatus } from "../api";
 import type { Space, TaskWithSubTasks, CalendarEvent, EventSpaceAssociation } from "../types";
 import { MDXEditor, headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin, markdownShortcutPlugin } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
+
+const SPACE_COLORS = [
+  "#3B82F6", "#6366F1", "#8B5CF6", "#A855F7",
+  "#EC4899", "#EF4444", "#F97316", "#F59E0B",
+  "#EAB308", "#84CC16", "#22C55E", "#10B981",
+  "#14B8A6", "#06B6D4", "#6B7280", "#1F2937",
+];
 
 interface SpaceHomeProps {
   selectedSpace: Space | null;
@@ -13,6 +21,7 @@ interface SpaceHomeProps {
   onTaskCreated?: (task: TaskWithSubTasks) => void;
   refreshTrigger?: number;
   onUpdateSpaceTitle: (spaceId: number, newTitle: string) => Promise<void>;
+  onUpdateSpaceColor: (spaceId: number, color: string) => Promise<void>;
   shouldEditSpaceTitle?: boolean;
 }
 
@@ -24,6 +33,7 @@ function SpaceHome({
   onTaskCreated,
   refreshTrigger,
   onUpdateSpaceTitle,
+  onUpdateSpaceColor,
   shouldEditSpaceTitle = false,
 }: SpaceHomeProps) {
   const [tasks, setTasks] = useState<TaskWithSubTasks[]>([]);
@@ -33,6 +43,9 @@ function SpaceHome({
   const [editedTitle, setEditedTitle] = useState("");
   const [titleError, setTitleError] = useState("");
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [isColorTokenHovered, setIsColorTokenHovered] = useState(false);
+  const colorPickerRef = useRef<HTMLDivElement>(null);
 
   const [upcomingEvents, setUpcomingEvents] = useState<{ association: EventSpaceAssociation; calendarEvent?: CalendarEvent }[]>([]);
 
@@ -68,6 +81,27 @@ function SpaceHome({
       titleInputRef.current.focus();
     }
   }, [isEditingTitle]);
+
+  useEffect(() => {
+    if (!showColorPicker) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
+        setShowColorPicker(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showColorPicker]);
+
+  async function handleColorSelect(color: string) {
+    if (!selectedSpace) return;
+    setShowColorPicker(false);
+    try {
+      await onUpdateSpaceColor(selectedSpace.id, color);
+    } catch (error) {
+      console.error("Failed to update space color:", error);
+    }
+  }
 
   async function loadTasks(spaceId: number) {
     try {
@@ -307,7 +341,61 @@ function SpaceHome({
       backgroundColor: "white",
     }}>
       {/* Page title */}
-      <div style={{ flexShrink: 0 }}>
+      <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "10px" }}>
+        {/* Color token */}
+        <div style={{ position: "relative" }} ref={colorPickerRef}>
+          <div
+            className="space-color-token"
+            onClick={() => setShowColorPicker(!showColorPicker)}
+            onMouseEnter={() => setIsColorTokenHovered(true)}
+            onMouseLeave={() => setIsColorTokenHovered(false)}
+            style={{
+              width: "20px",
+              height: "20px",
+              backgroundColor: selectedSpace.color,
+              borderRadius: "4px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            {isColorTokenHovered && (
+              <div style={{
+                position: "absolute",
+                inset: 0,
+                borderRadius: "4px",
+                backgroundColor: "rgba(0, 0, 0, 0.3)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}>
+                <PencilIcon size={12} fill="white" />
+              </div>
+            )}
+          </div>
+
+          {showColorPicker && (
+            <div className="space-color-picker">
+              {SPACE_COLORS.map((color) => (
+                <button
+                  key={color}
+                  onClick={() => handleColorSelect(color)}
+                  className="space-color-swatch"
+                  style={{
+                    backgroundColor: color,
+                    outline: selectedSpace.color === color
+                      ? "2px solid #333"
+                      : "none",
+                    outlineOffset: selectedSpace.color === color ? "1px" : undefined,
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
         {isEditingTitle ? (
           <div>
             <TextInput

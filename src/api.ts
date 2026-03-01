@@ -82,6 +82,29 @@ export async function updateSpace(
   return updatedSpace[0];
 }
 
+export async function updateSpaceColor(
+  id: number,
+  color: string,
+): Promise<Space> {
+  const database = await getDb();
+
+  await database.execute(
+    "UPDATE spaces SET color = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+    [color, id],
+  );
+
+  const updatedSpace = await database.select<Space[]>(
+    "SELECT * FROM spaces WHERE id = $1",
+    [id],
+  );
+
+  if (updatedSpace.length === 0) {
+    throw new Error("Failed to retrieve updated space");
+  }
+
+  return updatedSpace[0];
+}
+
 export async function deleteSpace(id: number): Promise<void> {
   const database = await getDb();
   await database.execute("DELETE FROM spaces WHERE id = $1", [id]);
