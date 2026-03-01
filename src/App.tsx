@@ -15,6 +15,7 @@ import {
   updateTask,
   updateTaskStatus,
   updateSpace,
+  updateSpaceColor,
 } from "./api";
 import type { Space, TaskWithSubTasks, NewSpace, NewTask } from "./types";
 import TaskDetail from "./components/TaskDetail";
@@ -159,6 +160,19 @@ function App() {
       setShouldEditSpaceTitle(false);
     } catch (error) {
       console.error("Failed to update space title:", error);
+      throw error;
+    }
+  }
+
+  async function handleUpdateSpaceColor(spaceId: number, color: string) {
+    try {
+      const updatedSpace = await updateSpaceColor(spaceId, color);
+      setSpaces((prev) =>
+        prev.map((space) => (space.id === spaceId ? updatedSpace : space))
+      );
+      setSelectedSpace(updatedSpace);
+    } catch (error) {
+      console.error("Failed to update space color:", error);
       throw error;
     }
   }
@@ -410,6 +424,7 @@ function App() {
             onTaskCreated={(task) => setTasks((prev) => [task, ...prev])}
             refreshTrigger={taskRefreshTrigger}
             onUpdateSpaceTitle={handleUpdateSpaceTitle}
+            onUpdateSpaceColor={handleUpdateSpaceColor}
             shouldEditSpaceTitle={shouldEditSpaceTitle}
           />
         )}
