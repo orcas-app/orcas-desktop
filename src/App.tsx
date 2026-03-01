@@ -91,7 +91,7 @@ function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showAgents, setShowAgents] = useState(false);
-  const [showToday, setShowToday] = useState(false);
+  const [showToday, setShowToday] = useState(true);
   const [taskRefreshTrigger, setTaskRefreshTrigger] = useState(0);
   const [shouldEditSpaceTitle, setShouldEditSpaceTitle] = useState(false);
 
