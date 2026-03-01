@@ -677,8 +677,8 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
             ...(chatPanelState === 'expanded'
               ? { height: 'calc(100vh - 200px)', maxHeight: '600px' }
               : { maxHeight: '194px' }),
-            backgroundColor: '#F2F2F2',
-            border: '1px solid #BDBDBD',
+            backgroundColor: '#f9f9f9',
+            border: '1px solid #828282',
             borderBottom: 'none',
             borderRadius: '8px 8px 0 0',
             display: 'flex',
@@ -724,7 +724,7 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
               style={{
                 flex: 1,
                 overflowY: 'auto',
-                padding: '0 24px 30px 24px',
+                padding: '0 8px 30px 8px',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '16px',
@@ -745,7 +745,6 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
                   <div
                     key={message.id}
                     style={{
-                      backgroundColor: '#E0E0E0',
                       borderRadius: '5px',
                       padding: '8px',
                       width: '100%',
@@ -766,14 +765,16 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
                     key={message.id}
                     className="today-agent-message"
                     style={{
-                      padding: '0 8px',
+                      backgroundColor: '#E0E0E0',
+                      borderRadius: '5px',
+                      padding: '8px',
                       width: '100%',
                     }}
                   >
                     <div style={{
                       fontSize: '16px',
                       fontFamily: "'IBM Plex Sans', sans-serif",
-                      color: '#828282',
+                      color: '#626262',
                       lineHeight: 'normal',
                     }}>
                       <ReactMarkdown>{contentText}</ReactMarkdown>
@@ -783,11 +784,16 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
               })}
 
               {currentStreamingMessage && (
-                <div style={{ padding: '0 8px', width: '100%' }}>
+                <div style={{
+                  backgroundColor: '#E0E0E0',
+                  borderRadius: '5px',
+                  padding: '8px',
+                  width: '100%',
+                }}>
                   <div style={{
                     fontSize: '16px',
                     fontFamily: "'IBM Plex Sans', sans-serif",
-                    color: '#828282',
+                    color: '#626262',
                     lineHeight: 'normal',
                   }}>
                     <ReactMarkdown>
@@ -829,6 +835,7 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
             placeholder="Help me organise my day"
             rows={1}
             disabled={isStreaming}
+            className="today-chat-textarea"
             style={{
               border: 'none',
               outline: 'none',

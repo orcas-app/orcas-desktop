@@ -1,5 +1,3 @@
-import { Heading, Button } from "@primer/react";
-import { ArrowLeftIcon } from "@primer/octicons-react";
 import { useState, useEffect, useRef } from "react";
 import {
   MDXEditor,
@@ -24,10 +22,8 @@ import "@mdxeditor/editor/style.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, emit } from "@tauri-apps/api/event";
 import type { TaskWithSubTasks, Agent } from "../types";
-import StatusChip from "./StatusChip";
 import AgentSelector from "./AgentSelector";
 import ChatInterface from "./ChatInterface";
-import PlanCard from "./PlanCard";
 import { getLastUsedAgentForTask } from "../api";
 
 interface TaskDetailProps {
@@ -37,7 +33,7 @@ interface TaskDetailProps {
   onUpdateTask?: (taskId: number, updates: Partial<TaskWithSubTasks>) => void;
 }
 
-function TaskDetail({ task, spaceName, onBack }: TaskDetailProps) {
+function TaskDetail({ task, onBack }: TaskDetailProps) {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [documentContent, setDocumentContent] = useState<string>("");
   const [isLoadingDocument, setIsLoadingDocument] = useState(true);
@@ -303,53 +299,43 @@ function TaskDetail({ task, spaceName, onBack }: TaskDetailProps) {
   };
 
   return (
-    <div className="page-container">
+    <div className="task-detail-page">
       {/* Header */}
-      <header className="task-details-header">
-        <Button
-          variant="invisible"
-          leadingVisual={ArrowLeftIcon}
-          onClick={onBack}
-          sx={{ mb: 2, ml: -2, color: "fg.muted" }}
-        >
-          {spaceName}
-        </Button>
-        <div className="heading-container">
-          <Heading sx={{ fontSize: 3, fontWeight: 600 }}>{task.title}</Heading>
-          <StatusChip variant={task.status}>
-            {task.status.replace("_", " ").toUpperCase()}
-          </StatusChip>
-        </div>
+      <header className="task-detail-header">
+        <button className="task-detail-back-btn" onClick={onBack} aria-label="Go back">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z" clipRule="evenodd" />
+          </svg>
+        </button>
+        <h1 className="task-detail-title">{task.title}</h1>
       </header>
 
       {/* Two-column layout */}
-      <div className="flex-row">
+      <div className="task-detail-columns">
         {/* Left column - Shared Document */}
         <div className="document-pane">
-          <div className="document-pane-inner">
-            {editLock === 'agent' && (
-              <div className="edit-lock-banner">
-                <span style={{ flex: 1 }}>🤖 Agent is editing... (Read-only mode)</span>
-                <button
-                  className="force-unlock-btn"
-                  onClick={forceUnlock}
-                  title="Force unlock if agent is stuck"
-                >
-                  Force Unlock
-                </button>
-              </div>
-            )}
+          {editLock === 'agent' && (
+            <div className="edit-lock-banner">
+              <span style={{ flex: 1 }}>Agent is editing... (Read-only mode)</span>
+              <button
+                className="force-unlock-btn"
+                onClick={forceUnlock}
+                title="Force unlock if agent is stuck"
+              >
+                Force Unlock
+              </button>
+            </div>
+          )}
 
-            {isLoadingDocument ? (
-              <div className="document-loading">Loading document...</div>
-            ) : (
-              <>
-                {console.log("[MDXEditor render] documentContent:", documentContent?.substring(0, 100), "key:", editorKey)}
-                <MDXEditor
-                  ref={editorRef}
-                  key={editorKey}
-                  markdown={documentContent}
-                  readOnly={editLock === 'agent'}
+          {isLoadingDocument ? (
+            <div className="document-loading">Loading document...</div>
+          ) : (
+            <>
+              <MDXEditor
+                ref={editorRef}
+                key={editorKey}
+                markdown={documentContent}
+                readOnly={editLock === 'agent'}
                 onChange={(newContent) => {
                   if (editLock !== 'agent') {
                     setDocumentContent(newContent);
@@ -384,49 +370,40 @@ function TaskDetail({ task, spaceName, onBack }: TaskDetailProps) {
                   editLock === 'agent' ? 'mdx-editor-readonly' : ''
                 }`}
               />
-              </>
-            )}
+            </>
+          )}
 
-            {pendingReview && (
-              <div className="review-panel">
-                <h3>Agent made changes</h3>
-                <p>Review the changes in diff view above</p>
-                <div className="review-actions">
-                  <button className="btn-accept" onClick={acceptChanges}>
-                    ✓ Accept Changes
-                  </button>
-                  <button className="btn-reject" onClick={rejectChanges}>
-                    ✗ Revert Changes
-                  </button>
-                </div>
+          {pendingReview && (
+            <div className="review-panel">
+              <h3>Agent made changes</h3>
+              <p>Review the changes in diff view above</p>
+              <div className="review-actions">
+                <button className="btn-accept" onClick={acceptChanges}>
+                  ✓ Accept Changes
+                </button>
+                <button className="btn-reject" onClick={rejectChanges}>
+                  ✗ Revert Changes
+                </button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
-        {/* Right column - Plan and Agent Panel */}
-        <div className="agent-pane">
-          {/* Plan Card - Always visible, shows empty state or subtasks */}
-          <div className="plan-card-container">
-            <PlanCard subtasks={task.subtasks || []} task={task} />
-          </div>
-
-          {/* Agent Selector or Chat Interface */}
-          <div className="agent-content">
-            {selectedAgent ? (
-              <ChatInterface
-                agent={selectedAgent}
-                taskId={task.id}
-                spaceId={task.space_id}
-                onBack={handleBackToAgentSelection}
-              />
-            ) : (
-              <AgentSelector
-                onAgentSelected={handleAgentSelected}
-                selectedAgent={selectedAgent}
-              />
-            )}
-          </div>
+        {/* Right column - Chat */}
+        <div className="task-detail-chat-pane">
+          {selectedAgent ? (
+            <ChatInterface
+              agent={selectedAgent}
+              taskId={task.id}
+              spaceId={task.space_id}
+              onBack={handleBackToAgentSelection}
+            />
+          ) : (
+            <AgentSelector
+              onAgentSelected={handleAgentSelected}
+              selectedAgent={selectedAgent}
+            />
+          )}
         </div>
       </div>
     </div>
