@@ -116,7 +116,7 @@ export default function TodayTaskList({ tasks, spaces, onRefresh, onTaskClick }:
               border: 'none',
               outline: 'none',
               fontSize: '16px',
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: "'IBM Plex Sans', sans-serif",
               color: '#333',
               backgroundColor: 'transparent',
             }}

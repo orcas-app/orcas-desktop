@@ -754,7 +754,7 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
                     <p style={{
                       margin: 0,
                       fontSize: '16px',
-                      fontFamily: 'Inter, sans-serif',
+                      fontFamily: "'IBM Plex Sans', sans-serif",
                       color: '#333',
                       lineHeight: 'normal',
                     }}>
@@ -772,7 +772,7 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
                   >
                     <div style={{
                       fontSize: '16px',
-                      fontFamily: 'Inter, sans-serif',
+                      fontFamily: "'IBM Plex Sans', sans-serif",
                       color: '#828282',
                       lineHeight: 'normal',
                     }}>
@@ -786,7 +786,7 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
                 <div style={{ padding: '0 8px', width: '100%' }}>
                   <div style={{
                     fontSize: '16px',
-                    fontFamily: 'Inter, sans-serif',
+                    fontFamily: "'IBM Plex Sans', sans-serif",
                     color: '#828282',
                     lineHeight: 'normal',
                   }}>
@@ -834,7 +834,7 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
               outline: 'none',
               resize: 'none',
               fontSize: '16px',
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: "'IBM Plex Sans', sans-serif",
               color: '#333',
               padding: '4px',
               backgroundColor: 'transparent',
@@ -859,7 +859,7 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
                   cursor: 'pointer',
                   fontSize: '16px',
                   color: '#333',
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: "'IBM Plex Sans', sans-serif",
                   padding: 0,
                 }}
               >
@@ -897,7 +897,7 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
                         background: selectedAgent?.id === agent.id ? '#f2f2f2' : 'none',
                         cursor: 'pointer',
                         fontSize: '14px',
-                        fontFamily: 'Inter, sans-serif',
+                        fontFamily: "'IBM Plex Sans', sans-serif",
                         color: '#333',
                       }}
                       onMouseEnter={(e) => { (e.target as HTMLElement).style.backgroundColor = '#f2f2f2'; }}

@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.61.0",
-    "@fontsource/inter": "^5.2.6",
+    "@fontsource/ibm-plex-sans": "^5.2.8",
     "@mdxeditor/editor": "^3.44.2",
     "@modelcontextprotocol/sdk": "^1.0.5",
     "@primer/octicons-react": "^19.16.0",
