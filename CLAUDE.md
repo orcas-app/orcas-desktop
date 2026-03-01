@@ -12,7 +12,7 @@ A macOS desktop app for managing AI agent workflows. Users organize work in Spac
 - **AI Integration**: Anthropic SDK (`@anthropic-ai/sdk`), LiteLLM gateway support
 - **UI Framework**: Primer React 37 (GitHub's design system) + Primer Octicons
 - **Markdown Editor**: MDX Editor (`@mdxeditor/editor`)
-- **Agent Tools**: Model Context Protocol (MCP) via `@modelcontextprotocol/sdk`
+- **Agent Tools**: Inline tool definitions in ChatInterface + MCP server via `@modelcontextprotocol/sdk`
 - **Platform Features**: macOS calendar integration (EventKit via Objective-C bridge)
 - **Styling**: Plain CSS with CSS custom properties (`src/App.css`)
 
@@ -29,7 +29,7 @@ orcas-desktop/
 │   ├── types.ts                # TypeScript interfaces (Space, Task, Agent, Chat, Calendar)
 │   ├── providers.ts            # Provider metadata and settings field definitions
 │   ├── components/             # React components
-│   │   ├── ChatInterface.tsx   # AI chat with streaming, MCP tools, edit locks
+│   │   ├── ChatInterface.tsx   # AI chat with streaming, agent tools, edit locks
 │   │   ├── AgentsManager.tsx   # Agent CRUD
 │   │   ├── TaskDetail.tsx      # Task view with MDX editor, edit locks, subtasks
 │   │   ├── PlanCard.tsx        # Task planning display (autonomous agent output)
@@ -37,7 +37,7 @@ orcas-desktop/
 │   │   ├── AgendaView.tsx      # Calendar agenda display
 │   │   ├── CalendarSettings.tsx# Calendar permission and source management
 │   │   ├── Settings.tsx        # App settings (API keys, provider selection)
-│   │   ├── TodayPage.tsx       # Today/agenda page with calendar integration
+│   │   ├── TodayPage.tsx       # Today page (default view) with calendar, tasks, and chat
 │   │   ├── TodayTaskList.tsx   # Task list for today view
 │   │   ├── AgentSelector.tsx   # Agent selection dropdown
 │   │   ├── EventPopover.tsx    # Calendar event details popup
@@ -98,7 +98,8 @@ Space (container, formerly "Project")
 - Agents have custom prompts, model selection, and optional web search
 - System agents (Planning Agent with `system_role='planning'`) handle specific workflows
 - Planning agent uses a tool-use loop (max 20 iterations) to create 3-7 subtasks
-- Agents interact via chat and use MCP tools to read/write documents
+- Agents interact via chat and use agent tools (defined in ChatInterface.tsx) to read/write documents, query tasks, calendar, and other agents
+- 3 additional MCP server tools (via stdio transport in `mcp-servers/agent-notes-server.ts`) provide direct database access for agent notes
 - Agent-task associations tracked in `task_agent_sessions` table
 
 ### Database Tables
@@ -204,7 +205,7 @@ flowchart TD
     I --> J[Frontend loads]
     J --> K[App.tsx mounts]
     K --> L[Fetch spaces from DB]
-    K --> M[Render sidebar + routes]
+    K --> M[Render sidebar + Today page\nas default view]
 ```
 
 ### Data Flow Architecture
@@ -236,7 +237,7 @@ flowchart LR
 - Component-level state via React hooks (useState/useEffect)
 - No global state library (no Redux, Zustand, or Context API at root)
 - Props drilling for data propagation between components
-- localStorage for chat history (`chat-task-${taskId}-agent-${agentId}`)
+- localStorage for chat history (`chat-task-${taskId}-agent-${agentId}`, `chat-today-agent-${agentId}`)
 - Tauri events for cross-component communication
 
 ## Tauri Commands (29 total)
@@ -273,12 +274,25 @@ flowchart LR
 ### space_context.rs
 - `read_space_context` / `write_space_context` - Space context markdown
 
-## MCP Tools (agent-notes-server.ts)
+## Agent Tools (ChatInterface.tsx)
 
-3 tools available to agents:
-- `read_task_notes` - Read task's shared markdown document
-- `write_task_notes` - Write/append to task document (supports `append` and `replace` operations)
-- `update_space_context` - Update space-level context markdown
+9 tools available to agents during task chat:
+- `read_task_notes` - Read the shared markdown document for a task
+- `write_task_notes` - Write or append content to a task's document (supports `append` and `replace` operations)
+- `check_task_notes_exists` - Check if a task document exists
+- `update_space_context` - Update the shared space context markdown
+- `read_space_context` - Read the shared space context markdown
+- `get_task_details` - Get full details of a task including subtasks, notes, and space info
+- `list_space_tasks` - List all tasks in a space with optional status filtering
+- `get_calendar_events` - Get calendar events for a specific date
+- `list_agents` - List all available agents with names, models, and descriptions
+
+### MCP Server Tools (agent-notes-server.ts)
+
+3 additional tools via MCP stdio transport (used by planning agent):
+- `read_task_notes` - Read task notes from `agent_notes` table
+- `write_task_notes` - Write/append to agent notes (supports `append` and `replace` operations)
+- `update_space_context` - Update space-level context markdown (updates `spaces.context_markdown` column)
 
 ## Event-Driven Communication
 
@@ -332,7 +346,11 @@ pub trait ProviderConfig: Send + Sync {
 3. Update relevant query functions
 4. Test migration path from previous version
 
-### Adding MCP Tools
+### Adding Agent Tools
+1. Define the tool schema and handler in `src/components/ChatInterface.tsx` (in the `agentTools` array and `executeAgentTool` function)
+2. Tools have access to Tauri invoke commands and can call any api.ts function
+
+### Adding MCP Server Tools
 1. Update `src/mcp-servers/agent-notes-server.ts` with new tool definition
 2. Add tool handler in the `CallToolRequestSchema` handler
 3. Use `database-utils.ts` helpers for database access
