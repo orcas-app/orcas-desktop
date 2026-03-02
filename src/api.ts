@@ -63,11 +63,10 @@ export async function updateSpace(
   space: NewSpace,
 ): Promise<Space> {
   const database = await getDb();
-  const color = space.color || "#3B82F6";
 
   await database.execute(
-    "UPDATE spaces SET title = $1, description = $2, color = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4",
-    [space.title, space.description || null, color, id],
+    "UPDATE spaces SET title = $1, description = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3",
+    [space.title, space.description || null, id],
   );
 
   const updatedSpace = await database.select<Space[]>(
