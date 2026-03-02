@@ -22,9 +22,8 @@ import "@mdxeditor/editor/style.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, emit } from "@tauri-apps/api/event";
 import type { TaskWithSubTasks, Agent } from "../types";
-import AgentSelector from "./AgentSelector";
 import ChatInterface from "./ChatInterface";
-import { getLastUsedAgentForTask } from "../api";
+import { getLastUsedAgentForTask, getAllAgents } from "../api";
 
 interface TaskDetailProps {
   task: TaskWithSubTasks;
@@ -46,20 +45,26 @@ function TaskDetail({ task, onBack }: TaskDetailProps) {
   const [editorKey, setEditorKey] = useState(0);
   const editorRef = useRef<MDXEditorMethods>(null);
 
-  // Load the last used agent for this task when the component mounts
+  // Load the last used agent (or first available) when the component mounts
   useEffect(() => {
-    const loadLastUsedAgent = async () => {
+    const loadAgent = async () => {
       try {
         const lastAgent = await getLastUsedAgentForTask(task.id);
         if (lastAgent) {
           setSelectedAgent(lastAgent);
+          return;
+        }
+        // Fall back to first available agent
+        const agents = await getAllAgents();
+        if (agents.length > 0) {
+          setSelectedAgent(agents[0]);
         }
       } catch (error) {
-        console.error("Failed to load last used agent:", error);
+        console.error("Failed to load agent:", error);
       }
     };
 
-    loadLastUsedAgent();
+    loadAgent();
   }, [task.id]);
 
   // Load the shared document content and check lock status
@@ -113,19 +118,15 @@ function TaskDetail({ task, onBack }: TaskDetailProps) {
         lockedBy: string | null;
         originalContent?: string | null;
       }>("agent-edit-lock-changed", async (event) => {
-        console.log("[agent-edit-lock-changed] Event received:", event.payload);
         if (event.payload.taskId === task.id) {
           if (event.payload.locked && event.payload.lockedBy) {
-            console.log("[agent-edit-lock-changed] Lock acquired by:", event.payload.lockedBy);
             setEditLock(event.payload.lockedBy as 'agent' | 'user');
 
-            // When agent acquires lock, fetch and store the original content
             if (event.payload.lockedBy === 'agent') {
               try {
                 const original = await invoke<string | null>("get_original_content", {
                   taskId: task.id,
                 });
-                console.log("[agent-edit-lock-changed] Original content fetched:", original?.substring(0, 100));
                 if (original !== null) {
                   setOriginalContent(original);
                 }
@@ -134,10 +135,6 @@ function TaskDetail({ task, onBack }: TaskDetailProps) {
               }
             }
           } else {
-            // Lock released - check for pending changes
-            console.log("[agent-edit-lock-changed] Lock released, checking for pending review");
-            console.log("[agent-edit-lock-changed] Original content from event:", event.payload.originalContent?.substring(0, 100));
-            // Use original content from event payload (since lock is already deleted from DB)
             const originalFromEvent = event.payload.originalContent;
             if (originalFromEvent) {
               setOriginalContent(originalFromEvent);
@@ -155,7 +152,6 @@ function TaskDetail({ task, onBack }: TaskDetailProps) {
       if (unlisten) {
         unlisten();
       }
-      // Clean up any locks when component unmounts (user navigates away)
       if (editLock) {
         invoke("release_edit_lock", { taskId: task.id }).catch((error) => {
           console.error("Failed to release lock on unmount:", error);
@@ -164,44 +160,29 @@ function TaskDetail({ task, onBack }: TaskDetailProps) {
     };
   }, [task.id, editLock]);
 
-  // Check if there are changes pending review after agent finishes
   const checkForPendingReview = async (originalFromEvent?: string) => {
     try {
       const currentContent = await invoke<string>("read_task_notes", {
         taskId: task.id,
       });
 
-      console.log("[checkForPendingReview] currentContent from DB:", currentContent?.substring(0, 100));
-      console.log("[checkForPendingReview] originalFromEvent:", originalFromEvent?.substring(0, 100));
-
-      // Use original content from event, or fall back to state
       const compareOriginal = originalFromEvent || originalContent;
 
-      // Verify we have original content to compare against
       if (!compareOriginal) {
         console.warn("No original content available for comparison");
         return;
       }
 
-      console.log("[checkForPendingReview] compareOriginal:", compareOriginal?.substring(0, 100));
-      console.log("[checkForPendingReview] content differs:", currentContent !== compareOriginal);
-
-      // If content differs from original, show review UI
       if (currentContent !== compareOriginal) {
-        console.log("[checkForPendingReview] Setting new content, length:", currentContent?.length);
         setOriginalContent(compareOriginal);
         setDocumentContent(currentContent);
         setPendingReview(true);
         setViewMode('diff');
-        // Force editor remount to apply new viewMode
         setEditorKey(prev => prev + 1);
-        // Also explicitly set the editor content after a short delay to ensure remount completes
         setTimeout(() => {
-          console.log("[checkForPendingReview] Setting editor markdown via ref");
           editorRef.current?.setMarkdown(currentContent);
         }, 50);
       } else {
-        // No changes detected, just clear the lock
         try {
           await invoke("release_edit_lock", { taskId: task.id });
         } catch (lockError) {
@@ -210,7 +191,6 @@ function TaskDetail({ task, onBack }: TaskDetailProps) {
       }
     } catch (error) {
       console.error("Failed to check for pending changes:", error);
-      // On error, try to release the lock anyway
       try {
         await invoke("release_edit_lock", { taskId: task.id });
       } catch (lockError) {
@@ -219,66 +199,50 @@ function TaskDetail({ task, onBack }: TaskDetailProps) {
     }
   };
 
-  // Save document content
   const saveDocument = async (content: string) => {
     try {
       await invoke("write_task_notes", {
         taskId: task.id,
         content: content,
       });
-      // Notify other components (e.g. ChatInterface) that task notes changed
       await emit("task-notes-changed", { taskId: task.id });
     } catch (error) {
       console.error("Failed to save document:", error);
     }
   };
 
-  // Accept agent changes
   const acceptChanges = async () => {
     try {
-      // Keep current content, update original
       setOriginalContent(documentContent);
       setPendingReview(false);
       setViewMode('rich-text');
-      // Force editor remount to apply new viewMode
       setEditorKey(prev => prev + 1);
-
-      // Clear lock from database
       await invoke("release_edit_lock", { taskId: task.id });
     } catch (error) {
       console.error("Failed to accept changes:", error);
     }
   };
 
-  // Revert agent changes
   const rejectChanges = async () => {
     try {
-      // Restore original content
       setDocumentContent(originalContent);
       await saveDocument(originalContent);
       setPendingReview(false);
       setViewMode('rich-text');
-      // Force editor remount to apply new viewMode
       setEditorKey(prev => prev + 1);
-
-      // Clear lock from database
       await invoke("release_edit_lock", { taskId: task.id });
     } catch (error) {
       console.error("Failed to revert changes:", error);
     }
   };
 
-  // Force unlock (for stuck locks)
   const forceUnlock = async () => {
     try {
       await invoke("release_edit_lock", { taskId: task.id });
       setEditLock(null);
       setPendingReview(false);
       setViewMode('rich-text');
-      // Force editor remount to apply new viewMode
       setEditorKey(prev => prev + 1);
-
-      // Emit event to notify other components
       await emit("agent-edit-lock-changed", {
         taskId: task.id,
         locked: false,
@@ -288,10 +252,6 @@ function TaskDetail({ task, onBack }: TaskDetailProps) {
       console.error("Failed to force unlock:", error);
       alert("Failed to release lock. Please restart the application.");
     }
-  };
-
-  const handleAgentSelected = (agent: Agent) => {
-    setSelectedAgent(agent);
   };
 
   const handleBackToAgentSelection = () => {
@@ -330,47 +290,45 @@ function TaskDetail({ task, onBack }: TaskDetailProps) {
           {isLoadingDocument ? (
             <div className="document-loading">Loading document...</div>
           ) : (
-            <>
-              <MDXEditor
-                ref={editorRef}
-                key={editorKey}
-                markdown={documentContent}
-                readOnly={editLock === 'agent'}
-                onChange={(newContent) => {
-                  if (editLock !== 'agent') {
-                    setDocumentContent(newContent);
-                    saveDocument(newContent);
-                  }
-                }}
-                plugins={[
-                  diffSourcePlugin({
-                    diffMarkdown: originalContent,
-                    viewMode: viewMode,
-                    readOnlyDiff: true,
-                  }),
-                  toolbarPlugin({
-                    toolbarContents: () => (
-                      <DiffSourceToggleWrapper>
-                        <BlockTypeSelect />
-                        <BoldItalicUnderlineToggles />
-                        <ListsToggle />
-                        <CreateLink />
-                      </DiffSourceToggleWrapper>
-                    ),
-                  }),
-                  headingsPlugin(),
-                  listsPlugin(),
-                  quotePlugin(),
-                  thematicBreakPlugin(),
-                  markdownShortcutPlugin(),
-                  linkPlugin(),
-                  linkDialogPlugin(),
-                ]}
-                contentEditableClassName={`mdx-editor-content ${
-                  editLock === 'agent' ? 'mdx-editor-readonly' : ''
-                }`}
-              />
-            </>
+            <MDXEditor
+              ref={editorRef}
+              key={editorKey}
+              markdown={documentContent}
+              readOnly={editLock === 'agent'}
+              onChange={(newContent) => {
+                if (editLock !== 'agent') {
+                  setDocumentContent(newContent);
+                  saveDocument(newContent);
+                }
+              }}
+              plugins={[
+                diffSourcePlugin({
+                  diffMarkdown: originalContent,
+                  viewMode: viewMode,
+                  readOnlyDiff: true,
+                }),
+                toolbarPlugin({
+                  toolbarContents: () => (
+                    <DiffSourceToggleWrapper>
+                      <BlockTypeSelect />
+                      <BoldItalicUnderlineToggles />
+                      <ListsToggle />
+                      <CreateLink />
+                    </DiffSourceToggleWrapper>
+                  ),
+                }),
+                headingsPlugin(),
+                listsPlugin(),
+                quotePlugin(),
+                thematicBreakPlugin(),
+                markdownShortcutPlugin(),
+                linkPlugin(),
+                linkDialogPlugin(),
+              ]}
+              contentEditableClassName={`mdx-editor-content ${
+                editLock === 'agent' ? 'mdx-editor-readonly' : ''
+              }`}
+            />
           )}
 
           {pendingReview && (
@@ -399,10 +357,11 @@ function TaskDetail({ task, onBack }: TaskDetailProps) {
               onBack={handleBackToAgentSelection}
             />
           ) : (
-            <AgentSelector
-              onAgentSelected={handleAgentSelected}
-              selectedAgent={selectedAgent}
-            />
+            <div className="chat-conversation-empty">
+              <div className="chat-conversation-empty-icon">💬</div>
+              <h4>No agent selected</h4>
+              <p>Loading agents...</p>
+            </div>
           )}
         </div>
       </div>

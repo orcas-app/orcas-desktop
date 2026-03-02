@@ -316,7 +316,7 @@ function SpaceHome({
         textAlign: "center",
         padding: "32px 24px",
       }}>
-        <Heading sx={{ fontSize: "24px", fontWeight: 600, mb: 3, color: "fg.default" }}>
+        <Heading sx={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: "24px", fontWeight: 600, mb: 3, color: "fg.default" }}>
           Welcome to Orcas
         </Heading>
         <Text sx={{ fontSize: 2, color: "fg.muted", mb: 4 }}>
@@ -429,6 +429,7 @@ function SpaceHome({
           <Heading
             onClick={handleTitleClick}
             sx={{
+              fontFamily: "'IBM Plex Sans', sans-serif",
               fontSize: "24px",
               fontWeight: 600,
               color: "#333",
@@ -463,7 +464,7 @@ function SpaceHome({
           {/* Upcoming Events */}
           {upcomingEvents.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: "4px", flexShrink: 0 }}>
-              <Heading sx={{ fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal", marginBottom: "8px" }}>
+              <Heading sx={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal", marginBottom: "8px" }}>
                 Upcoming Events
               </Heading>
               {upcomingEvents.map((item) => (
@@ -525,7 +526,7 @@ function SpaceHome({
 
           {/* Section header */}
           <div style={{ flexShrink: 0 }}>
-            <Heading sx={{ fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal" }}>
+            <Heading sx={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal" }}>
               Up Next
             </Heading>
           </div>
@@ -687,7 +688,7 @@ function SpaceHome({
         }}>
           {/* Context section */}
           <div style={{ display: "flex", flexDirection: "column", gap: "12px", minHeight: 0 }}>
-            <Heading sx={{ fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal", flexShrink: 0 }}>
+            <Heading sx={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal", flexShrink: 0 }}>
               Context
             </Heading>
             {isContextLoading ? (
@@ -716,7 +717,7 @@ function SpaceHome({
 
           {/* Documents section */}
           <div style={{ display: "flex", flexDirection: "column", gap: "12px", flexShrink: 0 }}>
-            <Heading sx={{ fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal" }}>
+            <Heading sx={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal" }}>
               Documents
             </Heading>
             <Text sx={{ fontSize: 2, color: "fg.muted" }}>No documents yet</Text>

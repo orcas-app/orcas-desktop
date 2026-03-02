@@ -97,8 +97,8 @@ impl PlanningAgent {
         })
     }
 
-    /// Get MCP tool definitions for the planning agent
-    fn get_mcp_tools(&self) -> Vec<serde_json::Value> {
+    /// Get tool definitions for the planning agent (Claude API tool-use format)
+    fn get_tool_schemas(&self) -> Vec<serde_json::Value> {
         vec![json!({
             "name": "create_subtask",
             "description": "Create a new subtask for the task being planned",
@@ -232,7 +232,7 @@ impl PlanningAgent {
             content: serde_json::Value::String(user_message),
         }];
 
-        let mcp_tools = self.get_mcp_tools();
+        let mcp_tools = self.get_tool_schemas();
         let mut subtasks_created = 0;
         let mut tool_use_iterations = 0;
         const MAX_ITERATIONS: usize = 20;

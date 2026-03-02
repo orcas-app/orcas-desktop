@@ -1,4 +1,8 @@
 #!/usr/bin/env tsx
+// DEPRECATED: This MCP server is no longer used by the application.
+// Agent tools are now defined in src/utils/agentTools.ts and executed via Tauri commands.
+// The planning agent (planning_agent.rs) uses direct Rust function calls.
+// This file is kept for reference only and can be safely removed.
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";

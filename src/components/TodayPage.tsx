@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Spinner } from '@primer/react';
-import ReactMarkdown from 'react-markdown';
-import { invoke } from '@tauri-apps/api/core';
+import ChatConversationPanel from './ChatConversationPanel';
+import ChatInputBar from './ChatInputBar';
 import AgendaView from './AgendaView';
 import TodayTaskList from './TodayTaskList';
 import type { CalendarEvent, Task, Space, Agent, EventSpaceTagWithSpace, ChatMessage } from '../types';
-import { getEventsForDate, getTasksScheduledForDate, getRecentlyEditedTasks, getAllSpaces, getEventSpaceTags, tagEventToSpace, untagEventFromSpace, getAllAgents, getSetting } from '../api';
-import { withRetry } from '../utils/retry';
-import { compactMessages } from '../utils/tokenEstimation';
+import { getEventsForDate, getTasksScheduledForDate, getRecentlyEditedTasks, getAllSpaces, getEventSpaceTags, tagEventToSpace, untagEventFromSpace, getAllAgents, getSetting, checkModelSupportsTools } from '../api';
 import { extractMeetingLink, formatAttendees } from '../utils/videoConferencing';
+import { sendChatTurn } from '../utils/chatEngine';
+import { getAgentToolSchemas, createToolExecutor } from '../utils/agentTools';
+import { buildSystemPrompt } from '../utils/promptFactory';
 
 interface TodayPageProps {
   onTaskClick?: (taskId: number) => void;
@@ -24,21 +24,14 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
   const [chatInput, setChatInput] = useState('');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-  const [showAgentDropdown, setShowAgentDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Chat conversation state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentStreamingMessage, setCurrentStreamingMessage] = useState<ChatMessage | null>(null);
-  // Chat panel state: 'hidden' | 'collapsed' | 'expanded'
-  //  hidden: no conversation panel shown (chat input not focused)
-  //  collapsed: small panel showing recent messages (chat input focused)
-  //  expanded: full overlay panel (user clicked expand chevron)
   const [chatPanelState, setChatPanelState] = useState<'hidden' | 'collapsed' | 'expanded'>('hidden');
   const [apiKey, setApiKey] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -67,14 +60,6 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
   };
 
   const generateId = () => Math.random().toString(36).substring(7);
-
-  const getMaxTokensForModel = (modelName: string): number => {
-    const limits: Record<string, number> = {
-      'claude-sonnet-4-5': 8192,
-      'claude-opus-4-5': 16384,
-    };
-    return limits[modelName] || 8192;
-  };
 
   const getTodayDate = (): string => {
     const today = new Date();
@@ -251,7 +236,6 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
   const buildAgendaContext = (): string => {
     const parts: string[] = [];
 
-    // Current time so the agent knows what's upcoming vs. past
     const now = new Date();
     parts.push(`Current time: ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} on ${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`);
 
@@ -263,7 +247,6 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
         let line = `- **${event.title}** (${event.is_all_day ? 'All day' : `${start} - ${end}`})`;
         if (event.location) line += `\n  Location: ${event.location}`;
 
-        // Attendees
         if (event.attendees && event.attendees.length > 0) {
           const { displayText } = formatAttendees(event.attendees, 5);
           if (displayText) {
@@ -271,13 +254,11 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
           }
         }
 
-        // Meeting link
         const meetingLink = extractMeetingLink(event);
         if (meetingLink) {
           line += `\n  Meeting link: ${meetingLink}`;
         }
 
-        // Space associations
         const tags = eventSpaceTags[event.id];
         if (tags && tags.length > 0) {
           line += `\n  Spaces: ${tags.map(t => t.space_title).join(', ')}`;
@@ -337,8 +318,6 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
 
     setCurrentStreamingMessage(assistantMessage);
 
-    let accumulatedContent = '';
-
     try {
       // Build conversation history for API
       const conversationMessages = messages
@@ -363,118 +342,58 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
         content: trimmedInput,
       });
 
-      const compactedMessages = compactMessages(conversationMessages);
-
       const agendaContext = buildAgendaContext();
-      const systemMessage = `${selectedAgent.agent_prompt || `You are ${selectedAgent.name}, a helpful AI assistant.`}
-
-You are helping the user plan and organise their day. Here is the context for today:
-
-${agendaContext}
-
-Use this context to help the user manage their schedule, prioritise tasks, and plan their day effectively.`;
+      const systemPrompt = buildSystemPrompt({
+        kind: 'today',
+        agentPrompt: selectedAgent.agent_prompt || '',
+        agentName: selectedAgent.name,
+        agendaContext,
+      });
 
       const modelName = selectedAgent.model_name || 'claude-sonnet-4-5';
-      const maxTokens = getMaxTokensForModel(modelName);
 
-      // Build tools list (web search only, no MCP tools for today page)
-      let toolsToSend: any[] | undefined = undefined;
+      // Resolve tools — all 9 agent tools + web search
+      const modelToolSupport = await checkModelSupportsTools(modelName);
+      let toolsToSend: any[] | undefined = modelToolSupport ? getAgentToolSchemas() : undefined;
+
       if (selectedAgent.web_search_enabled) {
-        toolsToSend = [{
+        const webSearchTool = {
           type: 'web_search_20250305',
           name: 'web_search',
           max_uses: 5,
-        }];
+        };
+        if (toolsToSend) {
+          toolsToSend.push(webSearchTool);
+        } else {
+          toolsToSend = [webSearchTool];
+        }
       }
 
-      let responseText: string = await withRetry(
-        () => invoke<string>('send_chat_message', {
-          model: modelName,
-          messages: compactedMessages,
-          system: systemMessage,
-          maxTokens: maxTokens,
+      // Create tool executor with no default taskId/spaceId (Today context)
+      const executeTool = createToolExecutor({});
+
+      const result = await sendChatTurn(
+        {
+          modelName,
+          systemPrompt,
           tools: toolsToSend,
           apiKey: apiKey || undefined,
-        }),
+        },
+        conversationMessages,
         {
-          maxRetries: 3,
-          baseDelay: 1000,
-          onRetry: (attempt, error) => {
-            console.log(`Retry attempt ${attempt} after error:`, error.message);
+          onContentUpdate: (content) => {
+            setCurrentStreamingMessage(prev => {
+              if (!prev) return null;
+              return { ...prev, content };
+            });
           },
-        }
+          executeTool,
+        },
       );
-
-      let response: any = JSON.parse(responseText);
-      let fullConversation = [...compactedMessages];
-
-      // Handle pause_turn for web search
-      while (response.stop_reason === 'pause_turn') {
-        const pauseText = response.content
-          .filter((block: any) => block.type === 'text')
-          .map((block: any) => block.text)
-          .join('');
-        if (pauseText) {
-          accumulatedContent += pauseText;
-          setCurrentStreamingMessage(prev => {
-            if (!prev) return null;
-            return { ...prev, content: accumulatedContent };
-          });
-        }
-
-        fullConversation.push({
-          role: 'assistant' as const,
-          content: response.content,
-        });
-
-        responseText = await withRetry(
-          () => invoke<string>('send_chat_message', {
-            model: modelName,
-            messages: fullConversation,
-            system: systemMessage,
-            maxTokens: maxTokens,
-            tools: toolsToSend,
-            apiKey: apiKey || undefined,
-          }),
-          {
-            maxRetries: 3,
-            baseDelay: 1000,
-            onRetry: (attempt, error) => {
-              console.log(`Retry attempt ${attempt} after error:`, error.message);
-            },
-          }
-        ) as string;
-
-        response = JSON.parse(responseText) as any;
-      }
-
-      // Extract final text content
-      const finalContent = response.content
-        .filter((block: any) => block.type === 'text')
-        .map((block: any) => block.text)
-        .join('');
-
-      accumulatedContent += finalContent;
-
-      // Extract citations from web search
-      const citations: { url: string; title: string }[] = [];
-      for (const block of response.content) {
-        if (block.type === 'text' && block.citations) {
-          for (const cite of block.citations) {
-            if (cite.url && !citations.some((c: any) => c.url === cite.url)) {
-              citations.push({ url: cite.url, title: cite.title || cite.url });
-            }
-          }
-        }
-      }
-      if (citations.length > 0) {
-        accumulatedContent += '\n\n**Sources:**\n' +
-          citations.map(c => `- [${c.title}](${c.url})`).join('\n');
-      }
 
       const finalMessage = {
         ...assistantMessage,
-        content: accumulatedContent,
+        content: result.content,
         streaming: false,
       };
 
@@ -504,14 +423,14 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
         }
       }
 
-      const errorMessage: ChatMessage = {
+      const errorMsg: ChatMessage = {
         id: generateId(),
         role: 'assistant',
         content: errorContent,
         timestamp: new Date(),
       };
 
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => [...prev, errorMsg]);
     }
   };
 
@@ -521,17 +440,6 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
       handleSendChat();
     }
   };
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowAgentDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   useEffect(() => {
     loadTodayData();
@@ -674,272 +582,34 @@ Use this context to help the user manage their schedule, prioritise tasks, and p
             left: 0,
             right: 0,
             bottom: '100%',
-            ...(chatPanelState === 'expanded'
-              ? { height: 'calc(100vh - 200px)', maxHeight: '600px' }
-              : { maxHeight: '194px' }),
-            backgroundColor: '#f9f9f9',
-            border: '1px solid #828282',
-            borderBottom: 'none',
-            borderRadius: '8px 8px 0 0',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
           }}>
-            {/* Expand/collapse chevron */}
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
+            <ChatConversationPanel
+              messages={messages}
+              currentStreamingMessage={currentStreamingMessage}
+              agentName={selectedAgent?.name || 'Agent'}
+              panelState={chatPanelState}
+              onToggleExpand={() => {
                 setChatPanelState(chatPanelState === 'expanded' ? 'collapsed' : 'expanded');
               }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '100%',
-                padding: '4px',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: '#828282',
-                flexShrink: 0,
-              }}
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                style={{
-                  transform: chatPanelState === 'expanded' ? 'rotate(180deg)' : 'rotate(0deg)',
-                  transition: 'transform 0.2s ease',
-                }}
-              >
-                <path d="M4 10L8 6L12 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-
-            {/* Messages Area */}
-            <div
-              ref={messagesContainerRef}
-              style={{
-                flex: 1,
-                overflowY: 'auto',
-                padding: '0 8px 30px 8px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '16px',
-                justifyContent: 'flex-end',
-              }}
-            >
-              {messages.map(message => {
-                const contentText = typeof message.content === 'string'
-                  ? message.content
-                  : Array.isArray(message.content)
-                    ? message.content
-                        .filter((block: any) => block.type === 'text')
-                        .map((block: any) => block.text)
-                        .join('')
-                    : '';
-
-                return message.role === 'user' ? (
-                  <div
-                    key={message.id}
-                    style={{
-                      borderRadius: '5px',
-                      padding: '8px',
-                      width: '100%',
-                    }}
-                  >
-                    <p style={{
-                      margin: 0,
-                      fontSize: '16px',
-                      fontFamily: "'IBM Plex Sans', sans-serif",
-                      color: '#333',
-                      lineHeight: 'normal',
-                    }}>
-                      {contentText}
-                    </p>
-                  </div>
-                ) : (
-                  <div
-                    key={message.id}
-                    className="today-agent-message"
-                    style={{
-                      backgroundColor: '#E0E0E0',
-                      borderRadius: '5px',
-                      padding: '8px',
-                      width: '100%',
-                    }}
-                  >
-                    <div style={{
-                      fontSize: '16px',
-                      fontFamily: "'IBM Plex Sans', sans-serif",
-                      color: '#626262',
-                      lineHeight: 'normal',
-                    }}>
-                      <ReactMarkdown>{contentText}</ReactMarkdown>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {currentStreamingMessage && (
-                <div style={{
-                  backgroundColor: '#E0E0E0',
-                  borderRadius: '5px',
-                  padding: '8px',
-                  width: '100%',
-                }}>
-                  <div style={{
-                    fontSize: '16px',
-                    fontFamily: "'IBM Plex Sans', sans-serif",
-                    color: '#626262',
-                    lineHeight: 'normal',
-                  }}>
-                    <ReactMarkdown>
-                      {typeof currentStreamingMessage.content === 'string'
-                        ? currentStreamingMessage.content || ' '
-                        : ' '}
-                    </ReactMarkdown>
-                    {currentStreamingMessage.streaming && (
-                      <div className="streaming-indicator">
-                        <Spinner size="small" />
-                        <span>{selectedAgent?.name || 'Agent'} is thinking...</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div ref={messagesEndRef} />
-            </div>
+            />
           </div>
         )}
 
         {/* Chat Input Bar */}
-        <div style={{
-          border: '1.5px solid black',
-          borderRadius: (hasConversation && chatPanelState !== 'hidden') ? '0 0 8px 8px' : '8px',
-          padding: '12px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
-          boxShadow: '0px 4px 8px 2px rgba(0,0,0,0.1)',
-          backgroundColor: 'white',
-        }}>
-          <textarea
-            ref={textareaRef}
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Help me organise my day"
-            rows={1}
-            disabled={isStreaming}
-            className="today-chat-textarea"
-            style={{
-              border: 'none',
-              outline: 'none',
-              resize: 'none',
-              fontSize: '16px',
-              fontFamily: "'IBM Plex Sans', sans-serif",
-              color: '#333',
-              padding: '4px',
-              backgroundColor: 'transparent',
-            }}
-          />
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            gap: '27px',
-          }}>
-            {/* Agent Selector */}
-            <div ref={dropdownRef} style={{ position: 'relative' }}>
-              <button
-                onClick={() => setShowAgentDropdown(!showAgentDropdown)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  color: '#333',
-                  fontFamily: "'IBM Plex Sans', sans-serif",
-                  padding: 0,
-                }}
-              >
-                {selectedAgent?.name || 'Select agent'}
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                  <path d="M5 8L10 13L15 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-              {showAgentDropdown && agents.length > 0 && (
-                <div style={{
-                  position: 'absolute',
-                  bottom: '100%',
-                  right: 0,
-                  marginBottom: '4px',
-                  backgroundColor: 'white',
-                  border: '1px solid #bdbdbd',
-                  borderRadius: '6px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-                  minWidth: '160px',
-                  zIndex: 10,
-                }}>
-                  {agents.map(agent => (
-                    <button
-                      key={agent.id}
-                      onClick={() => {
-                        setSelectedAgent(agent);
-                        setShowAgentDropdown(false);
-                      }}
-                      style={{
-                        display: 'block',
-                        width: '100%',
-                        textAlign: 'left',
-                        padding: '8px 12px',
-                        border: 'none',
-                        background: selectedAgent?.id === agent.id ? '#f2f2f2' : 'none',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                        fontFamily: "'IBM Plex Sans', sans-serif",
-                        color: '#333',
-                      }}
-                      onMouseEnter={(e) => { (e.target as HTMLElement).style.backgroundColor = '#f2f2f2'; }}
-                      onMouseLeave={(e) => { (e.target as HTMLElement).style.backgroundColor = selectedAgent?.id === agent.id ? '#f2f2f2' : 'transparent'; }}
-                    >
-                      {agent.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Send Button */}
-            <button
-              onClick={handleSendChat}
-              disabled={!chatInput.trim() || !selectedAgent || isStreaming}
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '6px',
-                backgroundColor: chatInput.trim() && selectedAgent && !isStreaming ? 'black' : '#bdbdbd',
-                border: 'none',
-                cursor: chatInput.trim() && selectedAgent && !isStreaming ? 'pointer' : 'default',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <path d="M6 12L3 21L21 12L3 3L6 12ZM6 12H13" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          </div>
-        </div>
+        <ChatInputBar
+          value={chatInput}
+          onChange={setChatInput}
+          onSend={handleSendChat}
+          onKeyDown={handleKeyDown}
+          isStreaming={isStreaming}
+          placeholder="Help me organise my day"
+          agents={agents}
+          selectedAgent={selectedAgent}
+          onAgentChange={setSelectedAgent}
+          hasConversationAbove={hasConversation && chatPanelState !== 'hidden'}
+          elevated={true}
+          textareaRef={textareaRef}
+        />
       </div>
     </div>
   );

@@ -249,21 +249,9 @@ function App() {
     );
   }
 
-  if (selectedTaskId !== null) {
-    const selectedTask = tasks.find((task) => task.id === selectedTaskId);
-    if (selectedTask) {
-      return (
-        <TaskDetail
-          task={selectedTask}
-          spaceName={selectedSpace?.title || ""}
-          onBack={() => setSelectedTaskId(null)}
-          onUpdateTask={handleUpdateTask}
-        />
-      );
-    }
-  }
+  const selectedTask = selectedTaskId !== null ? tasks.find((task) => task.id === selectedTaskId) : undefined;
 
-  const currentView = showSettings ? "settings" : showAgents ? "agents" : showToday ? "today" : "home";
+  const currentView = selectedTask ? "task" : showSettings ? "settings" : showAgents ? "agents" : showToday ? "today" : "home";
 
   const handleNavigation = (view: "home" | "settings" | "agents" | "today") => {
     setShowSettings(view === "settings");
@@ -412,6 +400,14 @@ function App() {
 
       {/* Main Content */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+        {currentView === "task" && selectedTask && (
+          <TaskDetail
+            task={selectedTask}
+            spaceName={selectedSpace?.title || ""}
+            onBack={() => setSelectedTaskId(null)}
+            onUpdateTask={handleUpdateTask}
+          />
+        )}
         {currentView === "settings" && <Settings />}
         {currentView === "agents" && <AgentsManager onBack={() => handleNavigation("home")} />}
         {currentView === "today" && <TodayPage onTaskClick={(taskId) => setSelectedTaskId(taskId)} />}
