@@ -25,7 +25,25 @@ if ! command -v bd &> /dev/null; then
     fi
 fi
 
-# Persist PATH so bd is available throughout the session
+# Install dolt (required by bd)
+if ! command -v dolt &> /dev/null; then
+    echo "Installing dolt..."
+    DOLT_VERSION="1.83.0"
+    DOLT_URL="https://github.com/dolthub/dolt/releases/download/v${DOLT_VERSION}/dolt-linux-amd64.tar.gz"
+    DOLT_BIN="${HOME}/.local/bin/dolt"
+    mkdir -p "$(dirname "$DOLT_BIN")"
+    if curl -fsSL "$DOLT_URL" -o /tmp/dolt.tar.gz 2>/dev/null && \
+       tar -xzf /tmp/dolt.tar.gz -C /tmp/ 2>/dev/null; then
+        cp /tmp/dolt-linux-amd64/bin/dolt "$DOLT_BIN"
+        chmod +x "$DOLT_BIN"
+        export PATH="${HOME}/.local/bin:$PATH"
+        echo "Installed dolt v${DOLT_VERSION}"
+    else
+        echo "Warning: failed to install dolt"
+    fi
+fi
+
+# Persist PATH so bd and dolt are available throughout the session
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
     echo "export PATH=\"${HOME}/.local/bin:\$PATH\"" >> "$CLAUDE_ENV_FILE"
 fi
