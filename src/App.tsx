@@ -10,6 +10,7 @@ import {
 import {
   getAllSpaces,
   getTasksBySpace,
+  getTaskById,
   createSpace,
   createTask,
   updateTask,
@@ -95,6 +96,7 @@ function App() {
   const [showToday, setShowToday] = useState(true);
   const [taskRefreshTrigger, setTaskRefreshTrigger] = useState(0);
   const [shouldEditSpaceTitle, setShouldEditSpaceTitle] = useState(false);
+  const [standaloneTask, setStandaloneTask] = useState<TaskWithSubTasks | null>(null);
 
   useEffect(() => {
     loadSpaces();
@@ -249,7 +251,21 @@ function App() {
     );
   }
 
-  const selectedTask = selectedTaskId !== null ? tasks.find((task) => task.id === selectedTaskId) : undefined;
+  const handleTaskClick = async (taskId: number) => {
+    setSelectedTaskId(taskId);
+    // If the task isn't in the current space's task list, fetch it directly
+    const found = tasks.find((t) => t.id === taskId);
+    if (!found) {
+      const fetched = await getTaskById(taskId);
+      setStandaloneTask(fetched);
+    } else {
+      setStandaloneTask(null);
+    }
+  };
+
+  const selectedTask = selectedTaskId !== null
+    ? tasks.find((task) => task.id === selectedTaskId) || standaloneTask || undefined
+    : undefined;
 
   const currentView = selectedTask ? "task" : showSettings ? "settings" : showAgents ? "agents" : showToday ? "today" : "home";
 
@@ -404,17 +420,17 @@ function App() {
           <TaskDetail
             task={selectedTask}
             spaceName={selectedSpace?.title || ""}
-            onBack={() => setSelectedTaskId(null)}
+            onBack={() => { setSelectedTaskId(null); setStandaloneTask(null); }}
             onUpdateTask={handleUpdateTask}
           />
         )}
         {currentView === "settings" && <Settings />}
         {currentView === "agents" && <AgentsManager onBack={() => handleNavigation("home")} />}
-        {currentView === "today" && <TodayPage onTaskClick={(taskId) => setSelectedTaskId(taskId)} />}
+        {currentView === "today" && <TodayPage onTaskClick={handleTaskClick} />}
         {currentView === "home" && (
           <SpaceHome
             selectedSpace={selectedSpace}
-            onTaskClick={(taskId) => setSelectedTaskId(taskId)}
+            onTaskClick={handleTaskClick}
             onShowNewTaskDialog={() => setShowNewTaskDialog(true)}
             onShowNewSpaceDialog={handleCreateSpace}
             onTaskCreated={(task) => setTasks((prev) => [task, ...prev])}

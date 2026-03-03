@@ -26,7 +26,7 @@ function ChatInputBar({
   agents,
   selectedAgent,
   onAgentChange,
-  hasConversationAbove = false,
+  hasConversationAbove: _hasConversationAbove = false,
   elevated = false,
   textareaRef: externalTextareaRef,
 }: ChatInputBarProps) {
@@ -60,7 +60,6 @@ function ChatInputBar({
   const className = [
     "chat-input-bar",
     elevated && "chat-input-bar--elevated",
-    hasConversationAbove && "chat-input-bar--attached",
   ]
     .filter(Boolean)
     .join(" ");

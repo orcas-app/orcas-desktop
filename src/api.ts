@@ -132,6 +132,27 @@ export async function updateSpaceContext(
 }
 
 // Task operations
+export async function getTaskById(
+  taskId: number,
+): Promise<TaskWithSubTasks | null> {
+  const database = await getDb();
+
+  const tasks = await database.select<Task[]>(
+    "SELECT * FROM tasks WHERE id = $1",
+    [taskId],
+  );
+
+  if (tasks.length === 0) return null;
+
+  const task = tasks[0];
+  const subtasks = await database.select<SubTask[]>(
+    "SELECT * FROM subtasks WHERE task_id = $1 ORDER BY created_at ASC",
+    [taskId],
+  );
+
+  return { ...task, subtasks };
+}
+
 export async function getTasksBySpace(
   spaceId: number,
 ): Promise<TaskWithSubTasks[]> {

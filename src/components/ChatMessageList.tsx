@@ -30,13 +30,11 @@ function ChatMessageList({
   agentName,
   renderMessageContent,
   containerRef,
-  messagesEndRef,
+  messagesEndRef: _messagesEndRef,
   emptyState,
 }: ChatMessageListProps) {
   const internalContainerRef = useRef<HTMLDivElement>(null);
-  const internalEndRef = useRef<HTMLDivElement>(null);
   const scrollRef = containerRef || internalContainerRef;
-  const endRef = messagesEndRef || internalEndRef;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -46,7 +44,6 @@ function ChatMessageList({
 
   const defaultEmptyState = (
     <div className="chat-conversation-empty">
-      <div className="chat-conversation-empty-icon">💬</div>
       <h4>Start a conversation with {agentName}</h4>
       <p>Ask questions, get feedback, or discuss your tasks. I&apos;m here to help!</p>
     </div>
@@ -64,11 +61,11 @@ function ChatMessageList({
             const contentText = extractTextContent(message.content);
 
             return message.role === "user" ? (
-              <div key={message.id} className="chat-msg-user">
+              <div key={message.id} className="chat-msg chat-msg-user">
                 {contentText}
               </div>
             ) : (
-              <div key={message.id} className="chat-msg-agent">
+              <div key={message.id} className="chat-msg chat-msg-agent">
                 {renderMessageContent
                   ? renderMessageContent(contentText, message.id)
                   : <ReactMarkdown>{contentText}</ReactMarkdown>}
@@ -77,7 +74,7 @@ function ChatMessageList({
           })}
 
           {currentStreamingMessage && (
-            <div className="chat-msg-agent">
+            <div className="chat-msg chat-msg-agent">
               <ReactMarkdown>
                 {extractTextContent(currentStreamingMessage.content) || " "}
               </ReactMarkdown>
@@ -90,7 +87,6 @@ function ChatMessageList({
             </div>
           )}
 
-          <div ref={endRef} />
         </div>
       )}
     </div>
