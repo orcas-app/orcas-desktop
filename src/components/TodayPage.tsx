@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import ChatConversationPanel from './ChatConversationPanel';
 import ChatInputBar from './ChatInputBar';
-import AgendaView from './AgendaView';
+import CalendarChip from './CalendarChip';
 import TodayTaskList from './TodayTaskList';
+import EventPopover from './EventPopover';
 import type { CalendarEvent, Task, Space, Agent, EventSpaceTagWithSpace, ChatMessage } from '../types';
 import { getEventsForDate, getTasksScheduledForDate, getRecentlyEditedTasks, getAllSpaces, getEventSpaceTags, tagEventToSpace, untagEventFromSpace, getAllAgents, getSetting, checkModelSupportsTools } from '../api';
 import { extractMeetingLink, formatAttendees } from '../utils/videoConferencing';
@@ -31,6 +32,8 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentStreamingMessage, setCurrentStreamingMessage] = useState<ChatMessage | null>(null);
   const [chatPanelState, setChatPanelState] = useState<'hidden' | 'collapsed' | 'expanded'>('hidden');
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [popoverAnchor, setPopoverAnchor] = useState<HTMLElement | null>(null);
   const [apiKey, setApiKey] = useState<string | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const chatAreaRef = useRef<HTMLDivElement>(null);
@@ -529,13 +532,50 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
             Agenda
           </h2>
           <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-            <AgendaView
-              events={events}
-              eventSpaceTags={eventSpaceTags}
-              spaces={spaces}
-              onTagSpace={handleTagSpace}
-              onUntagSpace={handleUntagSpace}
-            />
+            {events.length === 0 ? (
+              <div style={{ fontSize: '14px', color: 'var(--color-gray-3)', padding: '8px 0' }}>
+                No events scheduled for today
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {[...events].sort((a, b) => {
+                  if (a.is_all_day && !b.is_all_day) return -1;
+                  if (!a.is_all_day && b.is_all_day) return 1;
+                  return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
+                }).map(event => {
+                  const meetingLink = extractMeetingLink(event);
+                  const { displayText: attendeesText } = formatAttendees(event.attendees);
+                  const timeStr = event.is_all_day
+                    ? 'All day'
+                    : new Date(event.start_date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
+                  return (
+                    <CalendarChip
+                      key={event.id}
+                      time={timeStr}
+                      title={event.title}
+                      attendees={attendeesText || undefined}
+                      hasVideoLink={!!meetingLink}
+                      onVideoClick={meetingLink ? () => window.open(meetingLink, '_blank') : undefined}
+                      onClick={(e) => {
+                        setSelectedEvent(event);
+                        setPopoverAnchor(e.currentTarget as HTMLElement);
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+            {selectedEvent && popoverAnchor && (
+              <EventPopover
+                event={selectedEvent}
+                anchorElement={popoverAnchor}
+                onClose={() => { setSelectedEvent(null); setPopoverAnchor(null); }}
+                spaces={spaces}
+                taggedSpaces={eventSpaceTags[selectedEvent.id]}
+                onTagSpace={(spaceId) => handleTagSpace(selectedEvent.id, spaceId)}
+                onUntagSpace={(spaceId) => handleUntagSpace(selectedEvent.id, spaceId)}
+              />
+            )}
           </div>
         </div>
 
