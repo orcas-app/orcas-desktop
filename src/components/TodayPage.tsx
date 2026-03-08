@@ -549,18 +549,20 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
                     ? 'All day'
                     : new Date(event.start_date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
                   return (
-                    <CalendarChip
-                      key={event.id}
-                      time={timeStr}
-                      title={event.title}
-                      attendees={attendeesText || undefined}
-                      hasVideoLink={!!meetingLink}
-                      onVideoClick={meetingLink ? () => window.open(meetingLink, '_blank') : undefined}
-                      onClick={(e) => {
-                        setSelectedEvent(event);
-                        setPopoverAnchor(e.currentTarget as HTMLElement);
-                      }}
-                    />
+                    <div key={event.id} id={`calendar-chip-${event.id}`}>
+                      <CalendarChip
+                        time={timeStr}
+                        title={event.title}
+                        attendees={attendeesText || undefined}
+                        hasVideoLink={!!meetingLink}
+                        onVideoClick={meetingLink ? () => window.open(meetingLink, '_blank') : undefined}
+                        onClick={() => {
+                          setSelectedEvent(event);
+                          const el = document.getElementById(`calendar-chip-${event.id}`);
+                          if (el) setPopoverAnchor(el);
+                        }}
+                      />
+                    </div>
                   );
                 })}
               </div>
