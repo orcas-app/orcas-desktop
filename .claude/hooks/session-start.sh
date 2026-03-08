@@ -30,6 +30,16 @@ if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
     echo "export PATH=\"${HOME}/.local/bin:\$PATH\"" >> "$CLAUDE_ENV_FILE"
 fi
 
+# Install dolt if not present (required by bd)
+if ! command -v dolt &> /dev/null; then
+    echo "Installing dolt..."
+    if curl -fsSL https://github.com/dolthub/dolt/releases/latest/download/install.sh | bash 2>/dev/null; then
+        echo "dolt installed"
+    else
+        echo "Warning: failed to install dolt"
+    fi
+fi
+
 # Verify and show version
 bd version
 
