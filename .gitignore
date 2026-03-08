@@ -25,6 +25,7 @@ dist-ssr
 # Agent files
 .claude/settings.local.json
 .claude/agent-*.json
+AGENTS.md
 
 # Environment variables
 .env
