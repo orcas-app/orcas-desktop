@@ -427,8 +427,25 @@ function ChatInterface({ agent, taskId, spaceId, onAgentChange }: ChatInterfaceP
     );
   };
 
+  const clearChat = () => {
+    setMessages([]);
+    localStorage.removeItem(`chat-task-${taskId}-agent-${agent.id}`);
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      {messages.length > 0 && (
+        <div className="chat-header-bar">
+          <button
+            className="chat-clear-btn"
+            onClick={clearChat}
+            disabled={isStreaming}
+            type="button"
+          >
+            Clear chat
+          </button>
+        </div>
+      )}
       <ChatMessageList
         messages={messages}
         currentStreamingMessage={currentStreamingMessage}

@@ -7,6 +7,8 @@ interface ChatConversationPanelProps {
   agentName: string;
   panelState: "hidden" | "collapsed" | "expanded";
   onToggleExpand: () => void;
+  onClear?: () => void;
+  isStreaming?: boolean;
 }
 
 function ChatConversationPanel({
@@ -15,6 +17,8 @@ function ChatConversationPanel({
   agentName,
   panelState,
   onToggleExpand,
+  onClear,
+  isStreaming = false,
 }: ChatConversationPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -27,8 +31,19 @@ function ChatConversationPanel({
       className="chat-conversation-area"
       style={{ maxHeight, transition: "max-height 0.3s ease" }}
     >
-      {/* Toggle button */}
-      <div style={{ display: "flex", justifyContent: "center", padding: "4px 0" }}>
+      {/* Toggle button row */}
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "4px 8px", position: "relative" }}>
+        {onClear && (
+          <button
+            className="chat-clear-btn"
+            onClick={onClear}
+            disabled={isStreaming}
+            type="button"
+            style={{ position: "absolute", right: 8 }}
+          >
+            Clear chat
+          </button>
+        )}
         <button className="chat-panel-toggle" onClick={onToggleExpand} type="button">
           <svg
             width="16"

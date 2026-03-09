@@ -96,6 +96,13 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
     }
   }, [messages, selectedAgent]);
 
+  const clearChat = () => {
+    setMessages([]);
+    if (selectedAgent) {
+      localStorage.removeItem(`chat-today-agent-${selectedAgent.id}`);
+    }
+  };
+
   const loadPersistedMessages = (agent: Agent) => {
     try {
       const saved = localStorage.getItem(`chat-today-agent-${agent.id}`);
@@ -633,6 +640,8 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
               onToggleExpand={() => {
                 setChatPanelState(chatPanelState === 'expanded' ? 'collapsed' : 'expanded');
               }}
+              onClear={clearChat}
+              isStreaming={isStreaming}
             />
           </div>
         )}

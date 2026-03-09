@@ -1206,6 +1206,35 @@ h3 {
     justify-content: center;
 }
 
+.chat-header-bar {
+    display: flex;
+    justify-content: flex-end;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.chat-clear-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #828282;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.chat-clear-btn:hover:not(:disabled) {
+    color: #EB5757;
+    background-color: rgba(235, 87, 87, 0.08);
+}
+
+.chat-clear-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 /* CSS Spinner (replaces Primer Spinner) */
 @keyframes spin {
     to { transform: rotate(360deg); }
