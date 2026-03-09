@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Heading, Button, Text, TextInput } from "@primer/react";
 import { PencilIcon } from "@primer/octicons-react";
 import { getTasksBySpace, getSpaceContext, updateSpaceContext, createTask, getSpaceEvents, getEventsForDate, getSetting, untagEventFromSpace, updateTaskStatus } from "../api";
 import type { Space, TaskWithSubTasks, CalendarEvent, EventSpaceAssociation } from "../types";
 import { MDXEditor, headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin, markdownShortcutPlugin } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
+import CalendarChip from "./CalendarChip";
 
 const SPACE_COLORS = [
   "#3B82F6", "#6366F1", "#8B5CF6", "#A855F7",
@@ -287,7 +287,7 @@ function SpaceHome({
     }
   }
 
-  function formatEventDateTime(association: EventSpaceAssociation, calendarEvent?: CalendarEvent): string {
+  function formatEventTime(association: EventSpaceAssociation, calendarEvent?: CalendarEvent): string {
     const date = new Date(association.associated_date + "T00:00:00");
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const dateStr = `${monthNames[date.getMonth()]} ${date.getDate()}`;
@@ -316,15 +316,27 @@ function SpaceHome({
         textAlign: "center",
         padding: "32px 24px",
       }}>
-        <Heading sx={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: "24px", fontWeight: 600, mb: 3, color: "fg.default" }}>
+        <h2 style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: "24px", fontWeight: 600, marginBottom: "12px", color: "#333" }}>
           Welcome to Orcas
-        </Heading>
-        <Text sx={{ fontSize: 2, color: "fg.muted", mb: 4 }}>
+        </h2>
+        <p style={{ fontSize: "16px", color: "#828282", marginBottom: "24px" }}>
           Create your first space to get started!
-        </Text>
-        <Button variant="primary" size="large" onClick={onShowNewSpaceDialog}>
+        </p>
+        <button
+          className="btn btn-primary"
+          onClick={onShowNewSpaceDialog}
+          style={{
+            fontSize: "16px",
+            padding: "8px 20px",
+            borderRadius: "6px",
+            border: "none",
+            backgroundColor: "#2f80ed",
+            color: "white",
+            cursor: "pointer",
+          }}
+        >
           Create First Space
-        </Button>
+        </button>
       </div>
     );
   }
@@ -398,7 +410,7 @@ function SpaceHome({
 
         {isEditingTitle ? (
           <div>
-            <TextInput
+            <input
               ref={titleInputRef}
               value={editedTitle}
               onChange={(e) => {
@@ -408,7 +420,7 @@ function SpaceHome({
               onKeyDown={handleTitleKeyDown}
               onBlur={handleTitleSave}
               placeholder="Enter space name..."
-              sx={{
+              style={{
                 fontSize: "24px",
                 fontWeight: 600,
                 border: titleError
@@ -417,29 +429,33 @@ function SpaceHome({
                 borderRadius: "6px",
                 padding: "4px 8px",
                 maxWidth: "500px",
+                fontFamily: "'IBM Plex Sans', sans-serif",
+                outline: "none",
               }}
             />
             {titleError && (
-              <Text sx={{ fontSize: 1, color: "#cf222e", display: "block", mt: 1 }}>
+              <span style={{ fontSize: "12px", color: "#cf222e", display: "block", marginTop: "4px" }}>
                 {titleError}
-              </Text>
+              </span>
             )}
           </div>
         ) : (
-          <Heading
+          <h2
             onClick={handleTitleClick}
-            sx={{
+            style={{
               fontFamily: "'IBM Plex Sans', sans-serif",
               fontSize: "24px",
               fontWeight: 600,
               color: "#333",
               cursor: "pointer",
               lineHeight: "normal",
-              "&:hover": { opacity: 0.75 },
+              margin: 0,
             }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.75"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
           >
             {selectedSpace.title}
-          </Heading>
+          </h2>
         )}
       </div>
 
@@ -461,75 +477,26 @@ function SpaceHome({
           overflow: "auto",
           minWidth: 0,
         }}>
-          {/* Upcoming Events */}
+          {/* Section header */}
+          <div style={{ flexShrink: 0 }}>
+            <h2 style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal", margin: 0 }}>
+              Up Next
+            </h2>
+          </div>
+
+          {/* CalendarChips */}
           {upcomingEvents.length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "4px", flexShrink: 0 }}>
-              <Heading sx={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal", marginBottom: "8px" }}>
-                Upcoming Events
-              </Heading>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", flexShrink: 0 }}>
               {upcomingEvents.map((item) => (
-                <div
+                <CalendarChip
                   key={item.association.id}
-                  style={{
-                    display: "flex",
-                    gap: "12px",
-                    alignItems: "center",
-                    padding: "4px 12px",
-                    height: "32px",
-                    borderRadius: "6px",
-                    backgroundColor: "white",
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#f6f6f6"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "white"; }}
-                >
-                  <Text sx={{ fontSize: "13px", color: "#828282", whiteSpace: "nowrap", flexShrink: 0 }}>
-                    [{formatEventDateTime(item.association, item.calendarEvent)}]
-                  </Text>
-                  <Text sx={{
-                    fontSize: "16px",
-                    color: "#333",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    flex: 1,
-                    minWidth: 0,
-                  }}>
-                    {item.association.event_title}
-                  </Text>
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleUntagEvent(item.association.event_id_external);
-                    }}
-                    style={{
-                      width: "20px",
-                      height: "20px",
-                      borderRadius: "4px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      cursor: "pointer",
-                      flexShrink: 0,
-                      opacity: 0.5,
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.5"; }}
-                  >
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#828282" strokeWidth="1.5" strokeLinecap="round">
-                      <path d="M1 1l8 8M9 1l-8 8" />
-                    </svg>
-                  </div>
-                </div>
+                  time={formatEventTime(item.association, item.calendarEvent)}
+                  title={item.association.event_title}
+                  onClick={() => handleUntagEvent(item.association.event_id_external)}
+                />
               ))}
             </div>
           )}
-
-          {/* Section header */}
-          <div style={{ flexShrink: 0 }}>
-            <Heading sx={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal" }}>
-              Up Next
-            </Heading>
-          </div>
 
           {/* Task list */}
           <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
@@ -688,13 +655,13 @@ function SpaceHome({
         }}>
           {/* Context section */}
           <div style={{ display: "flex", flexDirection: "column", gap: "12px", minHeight: 0 }}>
-            <Heading sx={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal", flexShrink: 0 }}>
+            <h2 style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal", margin: 0, flexShrink: 0 }}>
               Context
-            </Heading>
+            </h2>
             {isContextLoading ? (
-              <Text sx={{ fontSize: 2, color: "fg.muted" }}>Loading context...</Text>
+              <p style={{ fontSize: "16px", fontFamily: "Inter, sans-serif", lineHeight: 1.4, color: "#828282", margin: 0 }}>Loading context...</p>
             ) : (
-              <div className="context-editor-pane" style={{ flex: 1 }}>
+              <div className="context-editor-pane" style={{ flex: 1, fontSize: "16px", fontFamily: "Inter, sans-serif", lineHeight: 1.4 }}>
                 <MDXEditor
                   key={selectedSpace.id}
                   markdown={contextContent}
@@ -717,10 +684,12 @@ function SpaceHome({
 
           {/* Documents section */}
           <div style={{ display: "flex", flexDirection: "column", gap: "12px", flexShrink: 0 }}>
-            <Heading sx={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal" }}>
+            <h2 style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: "20px", fontWeight: 600, color: "#333", lineHeight: "normal", margin: 0 }}>
               Documents
-            </Heading>
-            <Text sx={{ fontSize: 2, color: "fg.muted" }}>No documents yet</Text>
+            </h2>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "12px" }}>
+              <p style={{ fontSize: "16px", fontFamily: "Inter, sans-serif", lineHeight: 1.4, color: "#828282", margin: 0 }}>No documents yet</p>
+            </div>
           </div>
         </div>
       </div>
