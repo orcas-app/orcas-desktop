@@ -182,7 +182,8 @@ export default function TodayPage({ onTaskClick }: TodayPageProps) {
         const allAgents = await getAllAgents();
         setAgents(allAgents);
         if (allAgents.length > 0 && !selectedAgent) {
-          setSelectedAgent(allAgents[0]);
+          const chiefOfStaff = allAgents.find(a => a.system_role === 'chief_of_staff');
+          setSelectedAgent(chiefOfStaff || allAgents[0]);
         }
       } catch (agentsError) {
         console.warn('Failed to load agents:', agentsError);

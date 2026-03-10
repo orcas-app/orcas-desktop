@@ -487,6 +487,12 @@ pub fn run() {
             sql: include_str!("../migrations/022_create_event_space_associations.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 23,
+            description: "add_chief_of_staff_agent",
+            sql: include_str!("../migrations/023_add_chief_of_staff_agent.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
