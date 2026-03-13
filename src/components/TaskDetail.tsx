@@ -24,6 +24,8 @@ import { listen, emit } from "@tauri-apps/api/event";
 import type { TaskWithSubTasks, Agent } from "../types";
 import ChatInterface from "./ChatInterface";
 import { getLastUsedAgentForTask, getAllAgents } from "../api";
+import { executeBackgroundTask } from "../utils/backgroundTasks";
+import { contextSupplementationTask } from "../utils/contextSupplementationTask";
 
 interface TaskDetailProps {
   task: TaskWithSubTasks;
@@ -235,6 +237,17 @@ function TaskDetail({ task, onBack }: TaskDetailProps) {
       console.error("Failed to revert changes:", error);
     }
   };
+
+  // Trigger background context supplementation on unmount
+  useEffect(() => {
+    const taskId = task.id;
+    const spaceId = task.space_id;
+    return () => {
+      executeBackgroundTask(contextSupplementationTask, { taskId, spaceId }).catch(
+        (err) => console.error("Background context update failed:", err),
+      );
+    };
+  }, [task.id, task.space_id]);
 
   const forceUnlock = async () => {
     try {
