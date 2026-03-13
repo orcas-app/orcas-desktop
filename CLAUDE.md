@@ -415,25 +415,3 @@ bd update <id> --status in_progress  # Claim work
 bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
-
-## Session Completion
-
-Work is NOT complete until `git push` succeeds.
-
-1. File issues for remaining work (`bd create`)
-2. Run quality gates if code changed
-3. Close finished issues (`bd close`)
-4. Push:
-   ```bash
-   git pull --rebase && bd sync && git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
