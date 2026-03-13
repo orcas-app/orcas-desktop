@@ -499,6 +499,12 @@ pub fn run() {
             sql: include_str!("../migrations/024_add_chief_of_staff_agent.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 25,
+            description: "add_background_task_runs",
+            sql: include_str!("../migrations/025_add_background_task_runs.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

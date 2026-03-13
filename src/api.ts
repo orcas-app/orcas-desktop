@@ -678,6 +678,66 @@ export async function getSpaceEvents(
   return await invoke<EventSpaceAssociation[]>("get_space_events", { spaceId, startDate, endDate });
 }
 
+// Background task run operations
+
+export interface BackgroundTaskRun {
+  id: number;
+  task_type: string;
+  scope_type: string;
+  scope_id: number;
+  trigger_source: string;
+  status: string;
+  error_message: string | null;
+  input_hash: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export async function getLastBackgroundTaskRun(
+  taskType: string,
+  scopeType: string,
+  scopeId: number,
+): Promise<BackgroundTaskRun | null> {
+  const database = await getDb();
+  const result = await database.select<BackgroundTaskRun[]>(
+    `SELECT * FROM background_task_runs
+     WHERE task_type = $1 AND scope_type = $2 AND scope_id = $3
+     ORDER BY created_at DESC LIMIT 1`,
+    [taskType, scopeType, scopeId],
+  );
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function insertBackgroundTaskRun(
+  taskType: string,
+  scopeType: string,
+  scopeId: number,
+  triggerSource: string,
+  inputHash: string | null,
+): Promise<number> {
+  const database = await getDb();
+  const result = await database.execute(
+    `INSERT INTO background_task_runs (task_type, scope_type, scope_id, trigger_source, status, input_hash)
+     VALUES ($1, $2, $3, $4, 'running', $5)`,
+    [taskType, scopeType, scopeId, triggerSource, inputHash],
+  );
+  return result.lastInsertId!;
+}
+
+export async function updateBackgroundTaskRunStatus(
+  id: number,
+  status: string,
+  errorMessage?: string,
+): Promise<void> {
+  const database = await getDb();
+  await database.execute(
+    `UPDATE background_task_runs
+     SET status = $1, error_message = $2, completed_at = CURRENT_TIMESTAMP
+     WHERE id = $3`,
+    [status, errorMessage || null, id],
+  );
+}
+
 // Update task scheduled date
 export async function updateTaskScheduledDate(
   taskId: number,
