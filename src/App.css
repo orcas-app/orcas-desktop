@@ -1058,14 +1058,12 @@ h3 {
 .tool-use-block-label {
     font-weight: 500;
     color: var(--color-text-primary);
-    font-size: 16px;
     white-space: nowrap;
 }
 
 .tool-use-block-name {
     flex: 1;
     color: var(--color-text-primary);
-    font-size: 16px;
 }
 
 .tool-use-block-chevron {
@@ -1076,7 +1074,6 @@ h3 {
 
 .tool-use-block-content {
     color: var(--color-text-secondary);
-    font-size: 16px;
     padding-top: 4px;
     overflow-x: auto;
 }
@@ -1087,7 +1084,6 @@ h3 {
 
 .tool-use-block-yaml {
     font-family: inherit;
-    font-size: 16px;
     margin: 0;
     white-space: pre-wrap;
     word-break: break-word;
