@@ -72,7 +72,7 @@ orcas-desktop/
 │   ├── settings.json           # Hook configuration
 │   └── hooks/
 │       └── session-start.sh    # SessionStart hook (npm install)
-└── .beads/                     # Issue tracking (bd command)
+└── tasks/                      # Issue tracking (bd command)
 ```
 
 ## Core Concepts
@@ -404,14 +404,17 @@ npm run tauri build  # Production build
 6. **Dual database pools** - Frontend uses `tauri-plugin-sql`, Rust uses `settings::DB_POOL` (OnceLock) — keep both in sync
 7. **Don't use `<Box>`** - Deprecated Primer component, use standard HTML or other Primer components instead
 
-## Issue Tracking
+## Task Tracking
 
-Use `bd` (beads) for all issue tracking:
+This project uses `tsk` for task management. **Always use `tsk` for ANY task-related operation** — listing, querying, creating, updating, or closing tasks. If it is not available directly, invoke using the `/task-manager` skill. Only read the file directory directly when neither of these options work.
 
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --status in_progress  # Claim work
-bd close <id>         # Complete work
-bd sync               # Sync with git
-```
+Tasks are stored as markdown files with YAML frontmatter at `tasks/<type>_<hex>.md` (e.g. `tasks/bug_5cc8.md`). Closed tasks move to `tasks/closed/`.
+
+### Individual Task Tracking
+1. **Setup tracking**: If there is not an existing task, create one with `tsk create` or `/task-manager`
+2. **Plan First**: Write plan to the task file with checkable items
+3. **Verify Plan**: Check in before starting implementation
+4. **Track Progress**: Mark items complete as you go
+5. **Explain Changes**: High-level summary at each step
+6. **Document Results**: Add review section to the task file
+7. **Capture Lessons**: Update `LEARNINGS.md` after corrections

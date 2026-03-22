@@ -1,4 +1,14 @@
 {
+  "env": {
+    "CLAUDE_CODE_TASK_LIST_ID": "orcas"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(tsk list:*)",
+      "Bash(tsk create:*)",
+      "Bash(tsk update:*)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
