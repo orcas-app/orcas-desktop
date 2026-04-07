@@ -406,15 +406,25 @@ npm run tauri build  # Production build
 
 ## Task Tracking
 
-This project uses chalk `task` for task management. **Always use `task` for ANY task-related operation** — listing, querying, creating, updating, or closing tasks. If it is not available directly, invoke using the `/chalk-task-manager` skill. Only read the file directory directly when neither of these options work.
+Use the `chalk` CLI tool for ALL task operations.
 
-Tasks are stored as markdown files with YAML frontmatter at `.chalk/tasks/<type>_<hex>.md` (e.g. `.chalk/tasks/bug_5cc8.md`). Closed tasks move to `tasks/closed/`.
+```bash
+chalk ready                          # First command when picking up work — shows unblocked tasks by priority
+chalk ready --parent=epic_0c4d       # Find available work under a specific epic
+chalk show <id>                      # View full task details
+chalk list --status=open             # List tasks with filters
+chalk update <id> --status=in_progress  # Claim a task
+chalk close <id>                     # Mark done (auto-unblocks dependents)
+chalk create "Title" --parent=<id>   # Create sub-task
+```
+
+If you have attempted to use `chalk` and it is not available, tasks can be read manually. Tasks are stored as markdown files with YAML frontmatter at `.chalk/tasks/<type>_<hex>.md` (e.g. `tasks/bug_5cc8.md`). Closed tasks move to `.chalk/tasks/closed/`.
 
 ### Individual Task Tracking
-1. **Setup tracking**: If there is not an existing task, create one with `task create` or `/chalk-task-manager`
+1. **Setup tracking**: If there is not an existing task, create one with `chalk create`
 2. **Plan First**: Write plan to the task file with checkable items
 3. **Verify Plan**: Check in before starting implementation
 4. **Track Progress**: Mark items complete as you go
 5. **Explain Changes**: High-level summary at each step
-6. **Document Results**: Add review section to the task file. Close the task if implemented
+6. **Document Results**: Add review section to the task file
 7. **Capture Lessons**: Update `LEARNINGS.md` after corrections

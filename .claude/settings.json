@@ -4,9 +4,10 @@
   },
   "permissions": {
     "allow": [
-      "Bash(task list:*)",
-      "Bash(task create:*)",
-      "Bash(task update:*)"
+      "Bash(chalk ready:*)",
+      "Bash(chalk list:*)",
+      "Bash(chalk create:*)",
+      "Bash(chalk update:*)"
     ]
   },
   "hooks": {
