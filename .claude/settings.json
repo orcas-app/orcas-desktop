@@ -8,7 +8,8 @@
       "Bash(chalk list:*)",
       "Bash(chalk create:*)",
       "Bash(chalk update:*)",
-      "Bash(chalk show:*)"
+      "Bash(chalk show:*)",
+      "Bash(chalk close:*)"
     ]
   },
   "hooks": {
